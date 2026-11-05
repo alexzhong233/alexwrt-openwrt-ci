@@ -172,7 +172,9 @@ UPDATE_PACKAGE "dockerman" "lisaac/luci-app-dockerman" "master"
 - `Packages.sh` 把软件包源码放进编译树，不代表软件一定进入固件。
 - 只有 `.config` 中存在 `CONFIG_PACKAGE_xxx=y`，或者其他配置间接选择了它，软件才会被编译进固件。
 
-当前明确选中的新增软件是 OpenAppFilter 和 `luci-app-nss`。当前没有在雅典娜专用配置中明确写入：
+当前明确选中的新增软件包括 OpenAppFilter、`luci-app-nss`、NetBird、Dockerman、PassWall、PassWall2、OpenClash 和 HomeProxy。
+
+配置中的明确选择为：
 
 ```text
 CONFIG_PACKAGE_netbird=y
@@ -180,9 +182,10 @@ CONFIG_PACKAGE_luci-app-dockerman=y
 CONFIG_PACKAGE_luci-app-passwall=y
 CONFIG_PACKAGE_luci-app-passwall2=y
 CONFIG_PACKAGE_luci-app-openclash=y
+CONFIG_PACKAGE_luci-app-homeproxy=y
 ```
 
-因此 NetBird、Dockerman、PassWall、PassWall2、OpenClash 目前不能仅凭 `Packages.sh` 断言一定已经打进固件；它们只是有源码或包目录可供配置选择。PassWall 和 OpenClash 的源码处理本来就在 VIKING 基线中，不是本次新增的驱动或功能实现。
+现在这些包会被 `.config` 明确选择，进入最终固件。PassWall、PassWall2 和 OpenClash 的源码处理本来就在 VIKING 基线中；本次新增的是雅典娜配置中的明确选入，以及 NetBird、Dockerman、OpenAppFilter 和 NSS 的额外包处理。
 
 ## 7. 手动脚本
 
