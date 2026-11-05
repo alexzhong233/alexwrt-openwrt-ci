@@ -1,0 +1,39 @@
+# SPDX-License-Identifier: MIT
+# Copyright (C) 2026 niubiAlex
+
+name: NIUBIALEX
+
+on:
+  workflow_dispatch:
+    inputs:
+      PACKAGE:
+        description: '额外插件配置，每行一个 CONFIG_PACKAGE_*，可选。'
+        required: false
+        type: string
+      TEST:
+        description: '仅生成配置，不编译固件。'
+        default: false
+        required: false
+        type: boolean
+
+permissions: write-all
+
+jobs:
+  build:
+    name: jdcloud_re-cs-02
+    uses: ./.github/workflows/WRT-CORE.yml
+    with:
+      WRT_CONFIG: IPQ60XX-NIUBIALEX
+      WRT_THEME: vantage
+      WRT_NAME: niubiAlex
+      WRT_SSID: niubiAlex
+      WRT_WORD: 88888888
+      WRT_IP: 192.168.88.1
+      WRT_PW: 不设置，首次登录后自行设置
+      WRT_REPO: https://github.com/VIKINGYFY/immortalwrt.git
+      WRT_BRANCH: owrt
+      WRT_SOURCE: VIKINGYFY/immortalwrt
+      WRT_PACKAGE: ${{inputs.PACKAGE}}
+      WRT_TEST: ${{inputs.TEST || false}}
+      WRT_FILES: RE-CS-02
+      WRT_APPFILTER: true

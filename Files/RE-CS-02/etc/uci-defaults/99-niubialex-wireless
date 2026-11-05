@@ -1,0 +1,43 @@
+#!/bin/sh
+
+# Apply the requested first-boot Wi-Fi layout once. Existing settings are
+# intentionally not touched after this script has run.
+
+set -u
+
+for section in $(uci show wireless 2>/dev/null | sed -n "s/^wireless\.\([^.=]*\)=wifi-device$/\1/p"); do
+	band=$(uci -q get "wireless.$section.band" || true)
+	path=$(uci -q get "wireless.$section.path" || true)
+	iface=""
+
+	for candidate in $(uci show wireless 2>/dev/null | sed -n "s/^wireless\.\([^.=]*\)=wifi-iface$/\1/p"); do
+		[ "$(uci -q get "wireless.$candidate.device" || true)" = "$section" ] || continue
+		iface=$candidate
+		break
+	done
+
+	[ -n "$iface" ] || continue
+
+	case "$band:$path" in
+		2g:*)
+			uci set "wireless.$iface.ssid=niubiAlex"
+			uci set "wireless.$section.htmode=HE40"
+			uci set "wireless.$iface.encryption=psk2+ccmp"
+			uci set "wireless.$iface.key=88888888"
+			;;
+		5g:*pci*)
+			uci set "wireless.$iface.ssid=niubiAlexGaming"
+			uci set "wireless.$iface.encryption=psk2+ccmp"
+			uci set "wireless.$iface.key=88888888"
+			;;
+		5g:*)
+			uci set "wireless.$iface.ssid=niubiAlex"
+			uci set "wireless.$iface.encryption=psk2+ccmp"
+			uci set "wireless.$iface.key=88888888"
+			;;
+	esac
+done
+
+uci commit wireless
+wifi reload 2>/dev/null || true
+exit 0
