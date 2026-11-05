@@ -19,7 +19,7 @@
 - 首次启动时会为 `netbird up` 安装默认禁用 DNS 的包装器；显式使用 `--disable-dns=false` 仍可恢复 NetBird DNS。
 - NetBird、Dockerman、PassWall 和 OpenClash 默认进入固件；HomeProxy 和 PassWall2 只编译为可安装模块，不默认写入 rootfs。
 - 1Panel LuCI 管理页 `luci-app-istorepanel` 默认进入固件，依赖 Docker；1Panel 容器本体仍由页面按需安装和管理。
-- ZeroTier、易有云文件管理器和 WorkBuddy2API 不进入固件。
+- ZeroTier、易有云文件管理器和 WorkBuddy2API 不进入固件；WorkBuddy2API 按需通过 Docker 部署。
 - 详细软件清单核对见 [SOFTWARE-AUDIT.md](SOFTWARE-AUDIT.md)。
 
 ## 脚本使用原则

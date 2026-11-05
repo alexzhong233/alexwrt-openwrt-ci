@@ -9,7 +9,7 @@
 | 当前软件 | 构建处理 |
 | --- | --- |
 | `appfilter`、`kmod-oaf`、`luci-app-oaf` | OpenAppFilter 三件套，已纳入 |
-| `athena-led`、`luci-app-athena-led` | 雅典娜 LED，来自 VIKING 上游和源码包 |
+| `athena-led`、`luci-app-athena-led` | 雅典娜 LED，构建时从 `577090447/JDC-AX6600-Athena-LED-Controller` 根目录提取 |
 | `docker`、`dockerd`、`docker-compose`、`luci-app-dockerman` | 显式选中 |
 | `netbird`、`luci-app-netbird`、中文翻译 | 主程序来自 packages feed，LuCI 页面从 `looong-cat/luci-app-netbird` 提取 |
 | `openlist`、`luci-app-openlist`、中文翻译 | 使用当前 feed 的包名，已移除旧的 `openlist2` 配置 |

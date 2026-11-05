@@ -82,7 +82,7 @@ Config——自定义配置
 - VIKING 上游的 NSS 功能主体：`nss-firmware`、`kmod-nss-wifi-drv`、`ATH11K_NSS_WIFI` 以及 ath11k/mac80211 NSS 补丁。
 - `luci-app-nss` 监控页面，用于查看 NSS/ECM 状态，不负责启用 NSS。
 - NetBird、PassWall、OpenClash、Dockerman 等默认软件包；HomeProxy 和 PassWall2 只编译为可安装模块。
-- 1Panel LuCI 管理页默认进入固件，依赖 Docker；1Panel 容器本体由页面按需安装和管理。ZeroTier、易有云文件管理器和 WorkBuddy2API 不进入固件。
+- 1Panel LuCI 管理页默认进入固件，依赖 Docker；1Panel 容器本体由页面按需安装和管理。ZeroTier、易有云文件管理器和 WorkBuddy2API 不进入固件；WorkBuddy2API 按需通过 Docker 部署。
 - NetBird/PassWall、NetBird/dnsmasq 冲突处理和升级前导出脚本。
 
 软件包会在 GitHub Actions 编译时由 `Scripts/Packages.sh` 下载并加入编译树，仓库里不会预先保存编译好的 `.ipk` 文件。脚本会安装到 `/usr/bin/`，配套 README 会随固件安装到 `/usr/share/niubiAlex/`；脚本不会自动注册为常驻服务。

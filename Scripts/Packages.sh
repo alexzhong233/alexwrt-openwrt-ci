@@ -127,7 +127,16 @@ DOCKERMAN_MAKEFILE="./package/luci-app-dockerman/applications/luci-app-dockerman
 if [ -f "$DOCKERMAN_MAKEFILE" ]; then
 	sed -i 's/^PKG_VERSION:=v/PKG_VERSION:=/' "$DOCKERMAN_MAKEFILE"
 fi
-UPDATE_TOPLEVEL_PACKAGE "luci-app-athena-led" "NONGFAH/luci-app-athena-led" "main"
+# 雅典娜 RE-CS-02 LED：使用控制器仓库根目录下的两个 OpenWrt 软件包。
+# 该仓库没有 pkg/ 父目录，因此分别提取 athena-led 和 luci-app-athena-led。
+UPDATE_NESTED_PACKAGE "athena-led" \
+	"577090447/JDC-AX6600-Athena-LED-Controller" \
+	"main" \
+	"athena-led"
+UPDATE_NESTED_PACKAGE "luci-app-athena-led" \
+	"577090447/JDC-AX6600-Athena-LED-Controller" \
+	"main" \
+	"luci-app-athena-led"
 UPDATE_TOPLEVEL_PACKAGE "luci-app-harbor-file" "destan19/luci-app-harbor-file" "main"
 UPDATE_TOPLEVEL_PACKAGE "vlmcsd" "mchome/openwrt-vlmcsd" "master"
 UPDATE_TOPLEVEL_PACKAGE "luci-app-vlmcsd" "mchome/luci-app-vlmcsd" "master"

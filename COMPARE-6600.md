@@ -23,7 +23,7 @@
 | PassWall2 | `=m`，编译但不默认安装 | 没有明确选入 | niubiAlex 可从包管理器安装 |
 | HomeProxy | `=m`，编译但不默认安装 | `=y`，默认安装 | 6600 默认多 HomeProxy |
 | OpenClash | `=y` | 没有明确选入 | niubiAlex 多 OpenClash |
-| Athena LED | 默认安装，源码来自 `NONGFAH/luci-app-athena-led` | 脚本从 `577090447/JDC-AX6600-Athena-LED-Controller` 提取 | 都有，来源不同 |
+| Athena LED | 默认安装，脚本从 `577090447/JDC-AX6600-Athena-LED-Controller` 根目录提取 `athena-led` 和 `luci-app-athena-led` | 脚本从同一仓库根目录提取 | 来源和提取逻辑一致 |
 | Harbor File | `luci-app-harbor-file=y` | 没有明确选入 | niubiAlex 多 Harbor File |
 | OpenList | `openlist`、LuCI 页面和中文翻译进入固件 | 没有明确选入 | niubiAlex 多 OpenList |
 | qBittorrent | 主程序和 LuCI 页面进入固件 | 没有明确选入 | niubiAlex 多 qBittorrent |
