@@ -92,10 +92,14 @@ CONFIG_PACKAGE_appfilter=y
 CONFIG_PACKAGE_kmod-oaf=y
 CONFIG_PACKAGE_luci-app-oaf=y
 CONFIG_PACKAGE_luci-i18n-oaf-zh-cn=y
+CONFIG_PACKAGE_nss-firmware=y
+CONFIG_PACKAGE_kmod-nss-wifi-drv=y
+CONFIG_ATH11K_NSS_WIFI=y
+CONFIG_NSS_FIRMWARE_VERSION_12_5=y
 CONFIG_PACKAGE_luci-app-nss=y
 ```
 
-因此，OpenAppFilter 和 `luci-app-nss` 是当前配置中明确要求进入固件的内容。
+其中 `nss-firmware`、`kmod-nss-wifi-drv` 和 `ATH11K_NSS_WIFI` 是 VIKING 上游提供的 NSS 功能主体；`luci-app-nss` 只提供监控页面。
 
 ## 4. Wi-Fi 首次启动逻辑
 
@@ -104,15 +108,16 @@ CONFIG_PACKAGE_luci-app-nss=y
 脚本通过 UCI 枚举 `wifi-device` 和对应的第一个 `wifi-iface`，然后按设备频段修改：
 
 ```sh
-2g:*   -> ssid niubiAlex
-5g:*pci* -> ssid niubiAlexGaming
-5g:*   -> ssid niubiAlex
+2g:*    -> ssid niubiAlex, channel 5, HE40
+5g:*pci* -> ssid niubiAlexGaming, channel 36, HE160
+5g:*    -> ssid niubiAlex, channel 161, HE80
 ```
 
 2.4 GHz 额外设置：
 
 ```sh
 uci set "wireless.$section.htmode=HE40"
+uci set "wireless.$section.channel=5"
 ```
 
 所有匹配到的无线接口使用：
@@ -124,7 +129,7 @@ key=88888888
 
 该脚本是一次性的 `uci-defaults` 初始化脚本，不是常驻服务。OpenWrt 成功执行后会移除它。
 
-当前实现的边界：它只修改每个无线设备找到的第一个 `wifi-iface`；如果设备路径没有包含 `pci`，5.2 GHz 可能会被识别成普通 5 GHz。这需要实际编译后查看 `uci show wireless` 验证。
+当前实现的边界：它只修改每个无线设备找到的第一个 `wifi-iface`。设备路径仍由上游设备树决定；如果 PCIe 设备路径没有包含 `pci`，需要在编译后查看 `uci show wireless`，再调整匹配条件。
 
 ## 5. 默认设置脚本的修改
 
@@ -172,7 +177,7 @@ UPDATE_PACKAGE "dockerman" "lisaac/luci-app-dockerman" "master"
 - `Packages.sh` 把软件包源码放进编译树，不代表软件一定进入固件。
 - 只有 `.config` 中存在 `CONFIG_PACKAGE_xxx=y`，或者其他配置间接选择了它，软件才会被编译进固件。
 
-当前明确选中的新增软件包括 OpenAppFilter、`luci-app-nss`、NetBird、Dockerman、PassWall、PassWall2、OpenClash 和 HomeProxy。
+当前明确选中的新增软件包括 OpenAppFilter、VIKING 上游 NSS 功能包、`luci-app-nss`、NetBird、Dockerman、PassWall 和 OpenClash。HomeProxy 与 PassWall2 编译为模块，默认不进入 rootfs。
 
 配置中的明确选择为：
 
@@ -180,12 +185,12 @@ UPDATE_PACKAGE "dockerman" "lisaac/luci-app-dockerman" "master"
 CONFIG_PACKAGE_netbird=y
 CONFIG_PACKAGE_luci-app-dockerman=y
 CONFIG_PACKAGE_luci-app-passwall=y
-CONFIG_PACKAGE_luci-app-passwall2=y
+CONFIG_PACKAGE_luci-app-passwall2=m
 CONFIG_PACKAGE_luci-app-openclash=y
-CONFIG_PACKAGE_luci-app-homeproxy=y
+CONFIG_PACKAGE_luci-app-homeproxy=m
 ```
 
-现在这些包会被 `.config` 明确选择，进入最终固件。PassWall、PassWall2 和 OpenClash 的源码处理本来就在 VIKING 基线中；本次新增的是雅典娜配置中的明确选入，以及 NetBird、Dockerman、OpenAppFilter 和 NSS 的额外包处理。
+现在这些包会被 `.config` 明确选择，进入最终固件或作为模块产出。PassWall、PassWall2 和 OpenClash 的源码处理本来就在 VIKING 基线中；本次新增的是雅典娜配置中的明确选入，以及 NetBird、Dockerman、OpenAppFilter 和 NSS 监控页的额外包处理。NSS 固件、Wi-Fi 主机驱动和 ath11k/mac80211 NSS 补丁继续直接使用 VIKING 上游。
 
 ## 7. 手动脚本
 
@@ -209,7 +214,7 @@ CONFIG_PACKAGE_luci-app-homeproxy=y
 
 本仓库没有新增或修改：
 
-- ath11k/NSS/Wi-Fi NSS 驱动实现；
+- ath11k/NSS/Wi-Fi NSS 驱动实现；这些功能继续由 VIKING 上游提供；
 - DTS、分区表、U-Boot；
 - TurboACC；
 - VIKING immortalwrt 的源码提交；
@@ -222,7 +227,7 @@ CONFIG_PACKAGE_luci-app-homeproxy=y
 VIKING immortalwrt 源码
         + VIKING OpenWRT-CI 编译框架
         + 雅典娜设备配置
-        + OpenAppFilter/NSS 配置
+        + OpenAppFilter/NSS 功能包选择和监控页
         + Wi-Fi 初始化
         + 手动诊断和修复脚本
 ```

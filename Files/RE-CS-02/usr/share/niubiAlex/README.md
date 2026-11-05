@@ -4,22 +4,39 @@
 
 ## Wi-Fi 默认值
 
-- 板载 2.4 GHz：SSID `niubiAlex`，保留生成的信道，优先使用 40 MHz。
-- 板载 5 GHz：SSID `niubiAlex`，保留生成的信道。
-- PCIe/5.2 GHz：SSID `niubiAlexGaming`，保留生成的信道。
+- 板载 2.4 GHz：SSID `niubiAlex`，信道 `5`，`HE40`。
+- 板载 5 GHz：SSID `niubiAlex`，信道 `161`，`HE80`。
+- PCIe/5.2 GHz：SSID `niubiAlexGaming`，信道 `36`，`HE160`。
 - 默认无线密码：`88888888`，首次启动后建议修改。
 
 ## 固件内置内容
 
 - OpenAppFilter：`appfilter`、`kmod-oaf`、`luci-app-oaf` 和中文翻译。页面在 LuCI 的“服务 -> 应用过滤”。
-- `luci-app-nss`：页面在“状态 -> NPU (NSS) Status”，用于读取 NSS/ECM 统计，不会自动打开无线 NSS，也不会改变转发配置。
-- NetBird、PassWall、HomeProxy 等软件包按构建配置打包；具体版本取决于编译时的上游仓库状态。
+- 雅典娜 LED、Harbor File、OpenList、qBittorrent、UU 游戏加速和 KMS 软件包。
+- NSS 功能主体来自 `VIKINGYFY/immortalwrt`：构建配置显式选择 `nss-firmware`、`kmod-nss-wifi-drv` 和 `ATH11K_NSS_WIFI`，实际 ath11k/mac80211 NSS 补丁也来自该上游源码。
+- `luci-app-nss` 只保留为状态监控页，页面在“状态 -> NPU (NSS) Status”；它不包含 NSS 驱动，不负责打开无线 NSS。
+- 首次启动时会为 `netbird up` 安装默认禁用 DNS 的包装器；显式使用 `--disable-dns=false` 仍可恢复 NetBird DNS。
+- NetBird、Dockerman、PassWall 和 OpenClash 默认进入固件；HomeProxy 和 PassWall2 只编译为可安装模块，不默认写入 rootfs。
+- 1Panel 没有纳入本构建，使用时手动安装。
+- ZeroTier、易有云文件管理器和 WorkBuddy2API 不进入固件。
 
 ## 脚本使用原则
 
 所有脚本都只是手动工具，放在 `/usr/bin/`，不会自动注册为 `/etc/init.d` 服务，不会自动 `enable`，也不会因为安装固件而自行执行。只有明确运行命令后才会检查或修改配置。
 
 遇到问题时，先运行诊断脚本，再根据诊断结果选择对应的修复脚本。不要为了“预防”而把所有脚本都运行一遍。
+
+## NetBird `up` 默认禁用 DNS
+
+固件首次启动时会把原始客户端保存为 `/usr/libexec/netbird-real`，并在 `/usr/bin/netbird` 放置包装器。执行 `netbird up ...` 时，如果命令行没有写 DNS 参数，包装器会自动追加 `--disable-dns`；其他 NetBird 命令原样转发。
+
+需要临时恢复 NetBird DNS 时显式执行：
+
+```sh
+netbird up --disable-dns=false
+```
+
+这项设置不会自动执行 `netbird up`，也不会自动登录或启动 NetBird。
 
 ## 两个 NetBird 新脚本
 

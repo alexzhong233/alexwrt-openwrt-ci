@@ -27,7 +27,7 @@ jobs:
     uses: ./.github/workflows/WRT-CORE.yml
     with:
       WRT_CONFIG: IPQ60XX-NIUBIALEX
-      WRT_THEME: vantage
+      WRT_THEME: aurora
       WRT_NAME: niubiAlex
       WRT_SSID: niubiAlex
       WRT_WORD: 88888888
@@ -36,6 +36,7 @@ jobs:
       WRT_REPO: https://github.com/VIKINGYFY/immortalwrt.git
       WRT_BRANCH: owrt
       WRT_SOURCE: VIKINGYFY/immortalwrt
+      WRT_EXTRA_CONFIG: IPQ60XX-NIUBIALEX-OVERRIDES
       WRT_PACKAGE: ${{inputs.PACKAGE}}
       WRT_TEST: ${{inputs.TEST || false}}
       WRT_FILES: RE-CS-02

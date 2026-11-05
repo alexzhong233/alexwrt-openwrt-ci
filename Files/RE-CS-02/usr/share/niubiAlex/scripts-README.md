@@ -11,6 +11,8 @@
 5. 查看备份和当前防火墙结构后，再决定是否运行 `netbird-passwall-lan-fix.sh apply`。
 6. 升级固件前运行 `export-router-state.sh`，保存软件包清单和配置状态。
 
+固件还会在首次启动时为 `netbird up` 安装默认禁用 DNS 的包装器。它只改变没有明确 DNS 参数的 `up` 命令，不会自动执行 NetBird 登录或连接。
+
 ## 两个新脚本怎么选
 
 ### `netbird-passwall-compat.sh`
@@ -70,6 +72,9 @@ pkill -f '/usr/bin/netbird-passwall-compat.sh'
 /usr/bin/netbird-dns-guard.sh check
 /usr/bin/netbird-passwall-lan-fix.sh check
 /usr/bin/export-router-state.sh /tmp/router-export-before-upgrade
+
+# 临时恢复 NetBird DNS
+netbird up --disable-dns=false
 ```
 
 涉及配置修改的命令都必须显式使用 `apply`、`restore` 或 `rollback`。后续新增脚本也只作为手动工具加入，并在这里补充触发条件和使用命令，不制作成内置常驻服务。

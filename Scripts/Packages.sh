@@ -41,6 +41,35 @@ UPDATE_PACKAGE() {
 	fi
 }
 
+# 拉取仓库根目录就是一个 OpenWrt 软件包的项目。
+# 这类仓库没有上层 package 目录，不能走 UPDATE_PACKAGE 的 pkg 提取逻辑。
+UPDATE_TOPLEVEL_PACKAGE() {
+	local PKG_DIR=$1
+	local PKG_REPO=$2
+	local PKG_BRANCH=$3
+	local TMP_DIR
+
+	echo " "
+	echo "Update top-level package: $PKG_DIR from $PKG_REPO"
+	for ROOT in ./feeds/luci ./feeds/packages; do
+		find "$ROOT" -maxdepth 3 -type d -iname "*$PKG_DIR*" -exec rm -rf {} + 2>/dev/null || true
+	done
+	TMP_DIR=$(mktemp -d)
+	git clone --depth=1 --single-branch --branch "$PKG_BRANCH" \
+		"https://github.com/$PKG_REPO.git" "$TMP_DIR/src"
+
+	if [ ! -f "$TMP_DIR/src/Makefile" ]; then
+		echo "Top-level Makefile missing in $PKG_REPO" >&2
+		rm -rf "$TMP_DIR"
+		return 1
+	fi
+
+	rm -rf "./package/$PKG_DIR"
+	mkdir -p "./package/$PKG_DIR"
+	cp -a "$TMP_DIR/src/." "./package/$PKG_DIR/"
+	rm -rf "$TMP_DIR"
+}
+
 # 调用示例
 # UPDATE_PACKAGE "OpenAppFilter" "destan19/OpenAppFilter" "master" "" "custom_name1 custom_name2"
 # UPDATE_PACKAGE "open-app-filter" "destan19/OpenAppFilter" "master" "" "luci-app-appfilter oaf" 这样会把原有的open-app-filter，luci-app-appfilter，oaf相关组件删除，不会出现coremark错误。
@@ -62,6 +91,10 @@ UPDATE_PACKAGE "openclash" "vernesong/OpenClash" "dev" "pkg"
 UPDATE_PACKAGE "passwall" "Openwrt-Passwall/openwrt-passwall" "main" "pkg"
 UPDATE_PACKAGE "passwall2" "Openwrt-Passwall/openwrt-passwall2" "main" "pkg"
 UPDATE_PACKAGE "dockerman" "lisaac/luci-app-dockerman" "master"
+UPDATE_TOPLEVEL_PACKAGE "luci-app-athena-led" "NONGFAH/luci-app-athena-led" "main"
+UPDATE_TOPLEVEL_PACKAGE "luci-app-harbor-file" "destan19/luci-app-harbor-file" "main"
+UPDATE_TOPLEVEL_PACKAGE "vlmcsd" "mchome/openwrt-vlmcsd" "master"
+UPDATE_TOPLEVEL_PACKAGE "luci-app-vlmcsd" "mchome/luci-app-vlmcsd" "master"
 
 # NetBird is a Go package in the OpenWrt packages feed. Reuse the feed copy
 # when available; otherwise fetch only net/netbird into the build tree.
@@ -90,7 +123,14 @@ if [[ "${WRT_APPFILTER,,}" == "true" ]]; then
 	rm -rf "$OAF_TMP"
 fi
 
-# NSS status LuCI page. It only reads qca-nss-drv/ECM debugfs counters.
+# NSS status LuCI page. It only reads available NSS/ECM debugfs counters.
+# The actual NSS firmware, host driver and ath11k/mac80211 NSS patches are
+# supplied by the VIKINGYFY/immortalwrt base selected by the device workflow.
+if [ -d ./package/qca-nss/nss-firmware ] && [ -d ./package/qca-nss/nss-wifi-drv ]; then
+	echo "VIKING NSS firmware and host driver found in the base source tree."
+else
+	echo "VIKING NSS base packages are not present; luci-app-nss will remain monitor-only."
+fi
 NSS_TMP=$(mktemp -d)
 git clone --depth=1 --single-branch --branch master \
 	"https://github.com/yduke/luci-app-nss.git" "$NSS_TMP/luci-app-nss"
@@ -110,6 +150,7 @@ UPDATE_PACKAGE "diskman" "sbwml/luci-app-diskman" "main"
 UPDATE_PACKAGE "mosdns" "sbwml/luci-app-mosdns" "v5" "" "v2dat"
 UPDATE_PACKAGE "openlist2" "sbwml/luci-app-openlist2" "main"
 UPDATE_PACKAGE "qbittorrent" "sbwml/luci-app-qbittorrent" "master" "" "qt6base qt6tools rblibtorrent"
+UPDATE_PACKAGE "uugamebooster" "xiaodoudou/luci-app-uugamebooster" "master" "pkg"
 UPDATE_PACKAGE "quickfile" "sbwml/luci-app-quickfile" "main"
 
 UPDATE_PACKAGE "ddns-go" "sirpdboy/luci-app-ddns-go" "main"

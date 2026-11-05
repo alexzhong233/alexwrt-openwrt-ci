@@ -1,0 +1,13 @@
+# 雅典娜个人固件的最终覆盖项。
+# WRT-CORE 在设备配置和 GENERAL.txt 之后追加本文件，因此这里的值优先。
+
+# 编译 HomeProxy 和 PassWall2，但不默认安装到固件 rootfs；需要时可从软件包管理器安装。
+CONFIG_PACKAGE_luci-app-homeproxy=m
+CONFIG_PACKAGE_luci-app-passwall2=m
+
+# VIKINGYFY/immortalwrt 提供 NSS 的功能主体；监控页仍内置。
+CONFIG_PACKAGE_nss-firmware=y
+CONFIG_PACKAGE_kmod-nss-wifi-drv=y
+CONFIG_ATH11K_NSS_WIFI=y
+CONFIG_NSS_FIRMWARE_VERSION_12_5=y
+CONFIG_PACKAGE_luci-app-nss=y

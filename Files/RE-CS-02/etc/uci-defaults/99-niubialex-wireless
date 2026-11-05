@@ -21,17 +21,22 @@ for section in $(uci show wireless 2>/dev/null | sed -n "s/^wireless\.\([^.=]*\)
 	case "$band:$path" in
 		2g:*)
 			uci set "wireless.$iface.ssid=niubiAlex"
+			uci set "wireless.$section.channel=5"
 			uci set "wireless.$section.htmode=HE40"
 			uci set "wireless.$iface.encryption=psk2+ccmp"
 			uci set "wireless.$iface.key=88888888"
 			;;
 		5g:*pci*)
 			uci set "wireless.$iface.ssid=niubiAlexGaming"
+			uci set "wireless.$section.channel=36"
+			uci set "wireless.$section.htmode=HE160"
 			uci set "wireless.$iface.encryption=psk2+ccmp"
 			uci set "wireless.$iface.key=88888888"
 			;;
 		5g:*)
 			uci set "wireless.$iface.ssid=niubiAlex"
+			uci set "wireless.$section.channel=161"
+			uci set "wireless.$section.htmode=HE80"
 			uci set "wireless.$iface.encryption=psk2+ccmp"
 			uci set "wireless.$iface.key=88888888"
 			;;

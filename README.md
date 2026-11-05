@@ -44,7 +44,7 @@ https://drive.wrt.moe/uboot/mediatek
 
 # 固件简要说明
 
-固件每天早上5点自动编译。
+雅典娜个人固件每天北京时间 06:00 自动编译。
 
 固件信息里的时间为编译开始的时间，方便核对上游源码提交时间。
 
@@ -75,10 +75,13 @@ Config——自定义配置
 
 - 后台地址 `192.168.88.1`，root 初始密码不预设。
 - 2.4 GHz 和板载 5 GHz 使用 `niubiAlex`，PCIe/5.2 GHz 使用 `niubiAlexGaming`。
-- 默认 Wi-Fi 密码 `88888888`；2.4 GHz 优先使用 40 MHz，信道沿用生成配置。
+- 默认 Wi-Fi 密码 `88888888`；2.4 GHz 使用信道 `5` 和 `HE40`，板载 5 GHz 使用信道 `161`，PCIe/5.2 GHz 使用信道 `36` 和 `HE160`。
 - OpenAppFilter：`appfilter`、`kmod-oaf`、`luci-app-oaf` 和中文翻译。
-- `luci-app-nss`，用于查看 NSS/ECM 状态。
-- NetBird、PassWall、OpenClash、HomeProxy、Dockerman 等构建所需的软件包来源。
+- 雅典娜 LED、Harbor File、OpenList、qBittorrent、UU 游戏加速和 KMS 软件包。
+- VIKING 上游的 NSS 功能主体：`nss-firmware`、`kmod-nss-wifi-drv`、`ATH11K_NSS_WIFI` 以及 ath11k/mac80211 NSS 补丁。
+- `luci-app-nss` 监控页面，用于查看 NSS/ECM 状态，不负责启用 NSS。
+- NetBird、PassWall、OpenClash、Dockerman 等默认软件包；HomeProxy 和 PassWall2 只编译为可安装模块。
+- 1Panel 由用户手动安装；ZeroTier、易有云文件管理器和 WorkBuddy2API 不进入固件。
 - NetBird/PassWall、NetBird/dnsmasq 冲突处理和升级前导出脚本。
 
 软件包会在 GitHub Actions 编译时由 `Scripts/Packages.sh` 下载并加入编译树，仓库里不会预先保存编译好的 `.ipk` 文件。脚本会安装到 `/usr/bin/`，配套 README 会随固件安装到 `/usr/share/niubiAlex/`；脚本不会自动注册为常驻服务。
