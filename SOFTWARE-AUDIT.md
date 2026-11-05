@@ -35,7 +35,7 @@
 
 - ZeroTier：不纳入。
 - 易有云文件管理相关的 `luci-app-linkease`：不纳入。
-- WorkBuddy2API：不纳入固件。
+- WorkBuddy2API：不编译进固件，按需通过 Docker 部署。
 - 1Panel：`luci-app-istorepanel` 默认纳入；它是 LuCI 管理包，实际 1Panel 容器由页面按需部署。
 
 ## 说明
