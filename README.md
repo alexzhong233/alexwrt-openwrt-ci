@@ -58,6 +58,32 @@ Scripts——自定义脚本
 
 Config——自定义配置
 
+# niubiAlex 雅典娜 RE-CS-02 自定义构建
+
+本仓库增加了针对京东云雅典娜 `jdcloud_re-cs-02` 的构建入口：
+
+- 工作流：`.github/workflows/NIUBIALEX.yml`
+- 设备配置：`Config/IPQ60XX-NIUBIALEX.txt`
+- 软件包处理：`Scripts/Packages.sh`
+- 固件文件注入：`Files/RE-CS-02/`
+- 构建说明：[README-NIUBIALEX.md](README-NIUBIALEX.md)
+- 脚本说明：[README-SCRIPTS.md](README-SCRIPTS.md)
+- 固件内说明副本：`Files/RE-CS-02/usr/share/niubiAlex/`
+
+这套构建使用 `VIKINGYFY/immortalwrt` 的 `owrt` 分支，目标设备限定为 `jdcloud_re-cs-02`。它加入了：
+
+- 后台地址 `192.168.88.1`，root 初始密码不预设。
+- 2.4 GHz 和板载 5 GHz 使用 `niubiAlex`，PCIe/5.2 GHz 使用 `niubiAlexGaming`。
+- 默认 Wi-Fi 密码 `88888888`；2.4 GHz 优先使用 40 MHz，信道沿用生成配置。
+- OpenAppFilter：`appfilter`、`kmod-oaf`、`luci-app-oaf` 和中文翻译。
+- `luci-app-nss`，用于查看 NSS/ECM 状态。
+- NetBird、PassWall、OpenClash、HomeProxy、Dockerman 等构建所需的软件包来源。
+- NetBird/PassWall、NetBird/dnsmasq 冲突处理和升级前导出脚本。
+
+软件包会在 GitHub Actions 编译时由 `Scripts/Packages.sh` 下载并加入编译树，仓库里不会预先保存编译好的 `.ipk` 文件。脚本会安装到 `/usr/bin/`，配套 README 会随固件安装到 `/usr/share/niubiAlex/`；脚本不会自动注册为常驻服务。
+
+工作流每天北京时间 06:00 左右自动触发，也可以在 GitHub Actions 页面手动运行。
+
 ## Star History
 
 <a href="https://www.star-history.com/?repos=vikingyfy%2Fopenwrt-ci&type=date&legend=top-left">
