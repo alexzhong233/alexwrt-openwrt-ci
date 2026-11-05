@@ -78,6 +78,7 @@ Config——自定义配置
 - 默认 Wi-Fi 密码 `88888888`；2.4 GHz 使用信道 `5` 和 `HE40`，板载 5 GHz 使用信道 `161`，PCIe/5.2 GHz 使用信道 `36` 和 `HE160`。
 - OpenAppFilter：`appfilter`、`kmod-oaf`、`luci-app-oaf` 和中文翻译。
 - 雅典娜 LED、Harbor File、OpenList、qBittorrent、UU 游戏加速和 KMS 软件包。
+- Docker Compose、NetBird LuCI、FullConeNAT、RTP2HTTPD、软件包管理器和 SysTools；OpenList 使用当前 `openlist` 包名。
 - VIKING 上游的 NSS 功能主体：`nss-firmware`、`kmod-nss-wifi-drv`、`ATH11K_NSS_WIFI` 以及 ath11k/mac80211 NSS 补丁。
 - `luci-app-nss` 监控页面，用于查看 NSS/ECM 状态，不负责启用 NSS。
 - NetBird、PassWall、OpenClash、Dockerman 等默认软件包；HomeProxy 和 PassWall2 只编译为可安装模块。

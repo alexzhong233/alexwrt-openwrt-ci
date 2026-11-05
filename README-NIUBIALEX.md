@@ -13,12 +13,14 @@
 
 - OpenAppFilter：`appfilter`、`kmod-oaf`、`luci-app-oaf` 和中文翻译。页面在 LuCI 的“服务 -> 应用过滤”。
 - 雅典娜 LED、Harbor File、OpenList、qBittorrent、UU 游戏加速和 KMS 软件包。
+- Docker、Docker Compose、NetBird LuCI、FullConeNAT、RTP2HTTPD、软件包管理器和 SysTools；OpenList 使用 `openlist`/`luci-app-openlist` 包名。
 - NSS 功能主体来自 `VIKINGYFY/immortalwrt`：构建配置显式选择 `nss-firmware`、`kmod-nss-wifi-drv` 和 `ATH11K_NSS_WIFI`，实际 ath11k/mac80211 NSS 补丁也来自该上游源码。
 - `luci-app-nss` 只保留为状态监控页，页面在“状态 -> NPU (NSS) Status”；它不包含 NSS 驱动，不负责打开无线 NSS。
 - 首次启动时会为 `netbird up` 安装默认禁用 DNS 的包装器；显式使用 `--disable-dns=false` 仍可恢复 NetBird DNS。
 - NetBird、Dockerman、PassWall 和 OpenClash 默认进入固件；HomeProxy 和 PassWall2 只编译为可安装模块，不默认写入 rootfs。
 - 1Panel 没有纳入本构建，使用时手动安装。
 - ZeroTier、易有云文件管理器和 WorkBuddy2API 不进入固件。
+- 详细软件清单核对见 [SOFTWARE-AUDIT.md](SOFTWARE-AUDIT.md)。
 
 ## 脚本使用原则
 

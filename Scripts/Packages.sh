@@ -70,6 +70,36 @@ UPDATE_TOPLEVEL_PACKAGE() {
 	rm -rf "$TMP_DIR"
 }
 
+# 从仓库的指定子目录提取一个 OpenWrt 软件包。
+# 适用于仓库根目录包含 README、feed 和测试文件，但真正的包位于子目录的项目。
+UPDATE_NESTED_PACKAGE() {
+	local PKG_DIR=$1
+	local PKG_REPO=$2
+	local PKG_BRANCH=$3
+	local PKG_SOURCE_DIR=$4
+	local TMP_DIR
+
+	echo " "
+	echo "Update nested package: $PKG_DIR from $PKG_REPO/$PKG_SOURCE_DIR"
+	for ROOT in ./feeds/luci ./feeds/packages; do
+		find "$ROOT" -maxdepth 3 -type d -iname "*$PKG_DIR*" -exec rm -rf {} + 2>/dev/null || true
+	done
+	TMP_DIR=$(mktemp -d)
+	git clone --depth=1 --single-branch --branch "$PKG_BRANCH" \
+		"https://github.com/$PKG_REPO.git" "$TMP_DIR/src"
+
+	if [ ! -f "$TMP_DIR/src/$PKG_SOURCE_DIR/Makefile" ]; then
+		echo "Nested package Makefile missing in $PKG_REPO/$PKG_SOURCE_DIR" >&2
+		rm -rf "$TMP_DIR"
+		return 1
+	fi
+
+	rm -rf "./package/$PKG_DIR"
+	mkdir -p "./package/$PKG_DIR"
+	cp -a "$TMP_DIR/src/$PKG_SOURCE_DIR/." "./package/$PKG_DIR/"
+	rm -rf "$TMP_DIR"
+}
+
 # 调用示例
 # UPDATE_PACKAGE "OpenAppFilter" "destan19/OpenAppFilter" "master" "" "custom_name1 custom_name2"
 # UPDATE_PACKAGE "open-app-filter" "destan19/OpenAppFilter" "master" "" "luci-app-appfilter oaf" 这样会把原有的open-app-filter，luci-app-appfilter，oaf相关组件删除，不会出现coremark错误。
@@ -95,6 +125,7 @@ UPDATE_TOPLEVEL_PACKAGE "luci-app-athena-led" "NONGFAH/luci-app-athena-led" "mai
 UPDATE_TOPLEVEL_PACKAGE "luci-app-harbor-file" "destan19/luci-app-harbor-file" "main"
 UPDATE_TOPLEVEL_PACKAGE "vlmcsd" "mchome/openwrt-vlmcsd" "master"
 UPDATE_TOPLEVEL_PACKAGE "luci-app-vlmcsd" "mchome/luci-app-vlmcsd" "master"
+UPDATE_NESTED_PACKAGE "luci-app-netbird" "looong-cat/luci-app-netbird" "main" "luci-app-netbird"
 
 # NetBird is a Go package in the OpenWrt packages feed. Reuse the feed copy
 # when available; otherwise fetch only net/netbird into the build tree.
@@ -148,10 +179,19 @@ UPDATE_PACKAGE "viking" "VIKINGYFY/packages" "main" "" "axonhub gecoosac miniupn
 
 UPDATE_PACKAGE "diskman" "sbwml/luci-app-diskman" "main"
 UPDATE_PACKAGE "mosdns" "sbwml/luci-app-mosdns" "v5" "" "v2dat"
-UPDATE_PACKAGE "openlist2" "sbwml/luci-app-openlist2" "main"
 UPDATE_PACKAGE "qbittorrent" "sbwml/luci-app-qbittorrent" "master" "" "qt6base qt6tools rblibtorrent"
 UPDATE_PACKAGE "uugamebooster" "xiaodoudou/luci-app-uugamebooster" "master" "pkg"
 UPDATE_PACKAGE "quickfile" "sbwml/luci-app-quickfile" "main"
+
+# 当前路由器使用的 SysTools 来自 LinkEase 应用扩展仓库。
+# 不提取 luci-app-istorepanel，因为它对应 1Panel，按约定由用户手动安装。
+UPDATE_PACKAGE "systools" "linkease/openwrt-app-actions" "main" "pkg"
+
+# iStore 商店及其任务组件来自同一仓库的嵌套软件包目录。
+UPDATE_NESTED_PACKAGE "luci-app-store" "linkease/istore" "main" "luci/luci-app-store"
+UPDATE_NESTED_PACKAGE "luci-lib-taskd" "linkease/istore" "main" "luci/luci-lib-taskd"
+UPDATE_NESTED_PACKAGE "luci-lib-xterm" "linkease/istore" "main" "luci/luci-lib-xterm"
+UPDATE_NESTED_PACKAGE "taskd" "linkease/istore" "main" "luci/taskd"
 
 UPDATE_PACKAGE "ddns-go" "sirpdboy/luci-app-ddns-go" "main"
 UPDATE_PACKAGE "netspeedtest" "sirpdboy/netspeedtest" "main" "" "homebox ookla-speedtest"
