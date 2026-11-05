@@ -68,6 +68,7 @@ Config——自定义配置
 - 固件文件注入：`Files/RE-CS-02/`
 - 构建说明：[README-NIUBIALEX.md](README-NIUBIALEX.md)
 - 脚本说明：[README-SCRIPTS.md](README-SCRIPTS.md)
+- 基线代码级对比：[DIFF-BASELINE.md](DIFF-BASELINE.md)
 - 固件内说明副本：`Files/RE-CS-02/usr/share/niubiAlex/`
 
 这套构建使用 `VIKINGYFY/immortalwrt` 的 `owrt` 分支，目标设备限定为 `jdcloud_re-cs-02`。它加入了：
