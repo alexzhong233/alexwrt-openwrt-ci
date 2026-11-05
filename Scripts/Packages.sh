@@ -143,6 +143,10 @@ UPDATE_TOPLEVEL_PACKAGE "vlmcsd" "mchome/openwrt-vlmcsd" "master"
 # C 文件错误地传给同一个 gcc -c -o 命令。使用真实交叉编译器并串行构建。
 VLMCSD_MAKEFILE="./package/vlmcsd/Makefile"
 if [ -f "$VLMCSD_MAKEFILE" ]; then
+	# 上游写的是 PKG_VERSION=svn1112。新 APK 打包器要求版本号必须以数字
+	# 开头，否则 apk mkpkg 直接报 "package version is invalid" 并中断编译。
+	# 去掉 svn 前缀不改变软件版本，只修正打包元数据（与 Dockerman 的 v 前缀同理）。
+	sed -i -E 's/^PKG_VERSION[[:space:]]*[:+]?=[[:space:]]*svn/PKG_VERSION:=/' "$VLMCSD_MAKEFILE"
 	python3 - "$VLMCSD_MAKEFILE" <<'PYEOF'
 import re
 import sys
