@@ -1,0 +1,225 @@
+# niubiAlex 与 VIKINGYFY/OpenWRT-CI 基线的代码级对比
+
+对比基线：本地 `upstream/main`。
+
+查看完整原始差异：
+
+```sh
+cd /Users/alex/Projects/niubiAlex-openwrt-ci
+git diff upstream/main..HEAD
+```
+
+当前自定义层相对基线涉及 18 个文件，新增或修改约 1030 行。
+
+## 1. 编译入口
+
+文件：`.github/workflows/NIUBIALEX.yml`
+
+基线没有这个雅典娜专用入口。当前新增：
+
+```yaml
+on:
+  schedule:
+    - cron: '0 22 * * *'
+  workflow_dispatch:
+```
+
+`0 22 * * *` 是 UTC 时间每天 22:00，对应北京时间第二天 06:00 左右。GitHub Actions 的实际启动可能有延迟。
+
+工作流把编译参数固定为：
+
+```yaml
+WRT_CONFIG: IPQ60XX-NIUBIALEX
+WRT_REPO: https://github.com/VIKINGYFY/immortalwrt.git
+WRT_BRANCH: owrt
+WRT_SOURCE: VIKINGYFY/immortalwrt
+WRT_FILES: RE-CS-02
+WRT_APPFILTER: true
+```
+
+这说明项目没有修改 VIKING 的 immortalwrt 源码，而是让 CI 在每次编译时拉取该源码，再应用本仓库的配置和文件。
+
+## 2. 通用工作流扩展
+
+文件：`.github/workflows/WRT-CORE.yml`
+
+新增三个输入参数：
+
+```yaml
+WRT_EXTRA_CONFIG
+WRT_FILES
+WRT_APPFILTER
+```
+
+新增的文件注入步骤：
+
+```sh
+cd ./wrt/
+mkdir -p ./files
+cp -a "$GITHUB_WORKSPACE/Files/$WRT_FILES/." ./files/
+```
+
+这一步是脚本进入最终固件的关键。OpenWrt 的 `files/` 目录会被映射到固件根文件系统，所以：
+
+- `Files/RE-CS-02/usr/bin/*.sh` 会进入固件的 `/usr/bin/`。
+- `Files/RE-CS-02/usr/share/niubiAlex/*.md` 会进入固件的 `/usr/share/niubiAlex/`。
+- `Files/RE-CS-02/etc/uci-defaults/99-niubialex-wireless` 会在首次启动时执行。
+
+新增的配置注入步骤：
+
+```sh
+if [ -n "$WRT_EXTRA_CONFIG" ]; then
+    cat "$GITHUB_WORKSPACE/Config/$WRT_EXTRA_CONFIG" >> .config
+fi
+```
+
+## 3. 雅典娜设备配置
+
+文件：`Config/IPQ60XX-NIUBIALEX.txt`
+
+新增目标设备选择：
+
+```text
+CONFIG_TARGET_qualcommax=y
+CONFIG_TARGET_qualcommax_ipq60xx=y
+CONFIG_TARGET_DEVICE_qualcommax_ipq60xx_DEVICE_jdcloud_re-cs-02=y
+```
+
+新增并明确选中的软件包：
+
+```text
+CONFIG_PACKAGE_appfilter=y
+CONFIG_PACKAGE_kmod-oaf=y
+CONFIG_PACKAGE_luci-app-oaf=y
+CONFIG_PACKAGE_luci-i18n-oaf-zh-cn=y
+CONFIG_PACKAGE_luci-app-nss=y
+```
+
+因此，OpenAppFilter 和 `luci-app-nss` 是当前配置中明确要求进入固件的内容。
+
+## 4. Wi-Fi 首次启动逻辑
+
+文件：`Files/RE-CS-02/etc/uci-defaults/99-niubialex-wireless`
+
+脚本通过 UCI 枚举 `wifi-device` 和对应的第一个 `wifi-iface`，然后按设备频段修改：
+
+```sh
+2g:*   -> ssid niubiAlex
+5g:*pci* -> ssid niubiAlexGaming
+5g:*   -> ssid niubiAlex
+```
+
+2.4 GHz 额外设置：
+
+```sh
+uci set "wireless.$section.htmode=HE40"
+```
+
+所有匹配到的无线接口使用：
+
+```sh
+encryption=psk2+ccmp
+key=88888888
+```
+
+该脚本是一次性的 `uci-defaults` 初始化脚本，不是常驻服务。OpenWrt 成功执行后会移除它。
+
+当前实现的边界：它只修改每个无线设备找到的第一个 `wifi-iface`；如果设备路径没有包含 `pci`，5.2 GHz 可能会被识别成普通 5 GHz。这需要实际编译后查看 `uci show wireless` 验证。
+
+## 5. 默认设置脚本的修改
+
+文件：`Scripts/Settings.sh`
+
+基线原来无条件替换 SSID 和密码：
+
+```sh
+sed -i "s/ssid '.*'/ssid '$WRT_SSID'/g; s/key '.*'/key '$WRT_WORD'/g"
+```
+
+当前拆成条件逻辑：
+
+```sh
+sed -i "s/ssid '.*'/ssid '$WRT_SSID'/g"
+if [ -n "$WRT_WORD" ]; then
+    sed -i "s/key '.*'/key '$WRT_WORD'/g"
+else
+    sed -i "s/encryption '.*'/encryption 'none'/g; s/key '.*'//g"
+fi
+```
+
+当前工作流传入 `WRT_WORD=88888888`，所以实际使用 WPA2 密码；如果以后把 `WRT_WORD` 留空，才会生成无密码 Wi-Fi。
+
+## 6. 软件包脚本的实际变化
+
+文件：`Scripts/Packages.sh`
+
+新增：
+
+1. Dockerman 源码：
+
+```sh
+UPDATE_PACKAGE "dockerman" "lisaac/luci-app-dockerman" "master"
+```
+
+2. NetBird 源码兜底下载：如果 feeds 或 package 里没有 `netbird`，就从 OpenWrt packages 仓库的 `net/netbird` 复制进编译树。
+
+3. OpenAppFilter 源码：当 `WRT_APPFILTER=true` 时复制 `open-app-filter`、`oaf`、`luci-app-oaf` 三个目录。
+
+4. `luci-app-nss` 源码：从 `yduke/luci-app-nss` 复制 Makefile、htdocs 和 root 目录。
+
+必须区分两件事：
+
+- `Packages.sh` 把软件包源码放进编译树，不代表软件一定进入固件。
+- 只有 `.config` 中存在 `CONFIG_PACKAGE_xxx=y`，或者其他配置间接选择了它，软件才会被编译进固件。
+
+当前明确选中的新增软件是 OpenAppFilter 和 `luci-app-nss`。当前没有在雅典娜专用配置中明确写入：
+
+```text
+CONFIG_PACKAGE_netbird=y
+CONFIG_PACKAGE_luci-app-dockerman=y
+CONFIG_PACKAGE_luci-app-passwall=y
+CONFIG_PACKAGE_luci-app-passwall2=y
+CONFIG_PACKAGE_luci-app-openclash=y
+```
+
+因此 NetBird、Dockerman、PassWall、PassWall2、OpenClash 目前不能仅凭 `Packages.sh` 断言一定已经打进固件；它们只是有源码或包目录可供配置选择。PassWall 和 OpenClash 的源码处理本来就在 VIKING 基线中，不是本次新增的驱动或功能实现。
+
+## 7. 手动脚本
+
+新增目录：`Files/RE-CS-02/usr/bin/`
+
+脚本用途：
+
+| 脚本 | 作用 | 是否自动运行 |
+|---|---|---|
+| `netbird-passwall-compat.sh` | NetBird 重建 nftables 链后补回 PassWall 标记保护规则 | 否，手动启动 |
+| `netbird-dnsmasq-wt0-fix.sh` | 处理 NetBird `wt0` 和 dnsmasq 的 53 端口冲突 | 否，手动执行 |
+| `netbird-dns-guard.sh` | 检查或切换 NetBird DNS | 否，手动执行 |
+| `netbird-passwall-diagnose.sh` | 收集 NetBird、DNS、PassWall、路由和 NSS 状态 | 否，手动执行 |
+| `netbird-passwall-lan-fix.sh` | 检查或修改 NetBird 网络和防火墙转发 | 否，手动执行 |
+| `export-router-state.sh` | 升级前导出软件包和配置状态 | 否，手动执行 |
+| `restore-package-list.sh` | 按清单重新安装软件包 | 否，手动执行 |
+
+本次没有新增 `/etc/init.d/` 服务，没有新增自动 `enable`，也没有新增开机守护进程。
+
+## 8. 当前没有改动的部分
+
+本仓库没有新增或修改：
+
+- ath11k/NSS/Wi-Fi NSS 驱动实现；
+- DTS、分区表、U-Boot；
+- TurboACC；
+- VIKING immortalwrt 的源码提交；
+- OpenWrt 内核转发路径；
+- `luci_plugins` 全局开关逻辑。
+
+所以它的定位是：
+
+```text
+VIKING immortalwrt 源码
+        + VIKING OpenWRT-CI 编译框架
+        + 雅典娜设备配置
+        + OpenAppFilter/NSS 配置
+        + Wi-Fi 初始化
+        + 手动诊断和修复脚本
+```
