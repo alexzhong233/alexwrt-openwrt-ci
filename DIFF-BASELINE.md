@@ -200,7 +200,7 @@ CONFIG_PACKAGE_luci-app-homeproxy=m
 
 | 脚本 | 作用 | 是否自动运行 |
 |---|---|---|
-| `netbird-passwall-compat.sh` | NetBird 重建 nftables 链后补回 PassWall 标记保护规则 | 否，手动启动 |
+| `netbird-passwall-compat.sh` | 动态发现 PassWall mark 和 NetBird prerouting 链，补回标记保护规则 | 默认不启动；可选 procd 服务 |
 | `netbird-dnsmasq-wt0-fix.sh` | 处理 NetBird `wt0` 和 dnsmasq 的 53 端口冲突 | 否，手动执行 |
 | `netbird-dns-guard.sh` | 检查或切换 NetBird DNS | 否，手动执行 |
 | `netbird-passwall-diagnose.sh` | 收集 NetBird、DNS、PassWall、路由和 NSS 状态 | 否，手动执行 |

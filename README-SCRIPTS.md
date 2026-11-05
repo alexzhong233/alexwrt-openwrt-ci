@@ -1,6 +1,6 @@
 # 雅典娜 RE-CS-02 脚本说明
 
-这些脚本用于 `jdcloud_re-cs-02` 的 ImmortalWrt/VIKING 环境。固件安装后脚本位于 `/usr/bin/`，全部由用户手动运行：不会自动启动、不会自动注册 procd 服务、不会自动加入开机启动。
+这些脚本用于 `jdcloud_re-cs-02` 的 ImmortalWrt/VIKING 环境。固件安装后脚本位于 `/usr/bin/`，默认不会自动启动或加入开机启动。`netbird-passwall-compat` 提供可选的 procd 服务文件。
 
 ## 推荐处理顺序
 
@@ -17,26 +17,42 @@
 
 ### `netbird-passwall-compat.sh`
 
-只处理 NetBird nftables 链和 PassWall 标记规则的冲突。
+只处理 NetBird 原生 nftables 链和 PassWall 标记规则的冲突。脚本会动态查找 PassWall 当前的 `meta mark set` 值和 NetBird 的 prerouting 链，不把 `0x50535731` 写死。自动发现失败时，可以临时用 `PASSWALL_MARK=0x...` 指定 mark。
 
-适用条件：NetBird 重建 `netbird-mangle-prerouting` 后，下面的规则消失：
+适用条件：NetBird 重建 prerouting 链后，下面这种规则消失：
 
 ```text
-meta mark 0x50535731 return
+meta mark <PassWall 当前 mark> return
 ```
 
-使用：
+单次检查并在缺失时补规则：
 
 ```sh
-nft -a list chain ip netbird netbird-mangle-prerouting
-nohup /usr/bin/netbird-passwall-compat.sh >/tmp/netbird-passwall-compat.log 2>&1 &
+/usr/bin/netbird-passwall-compat.sh --once
 ```
 
-它每 30 秒检查一次，只在规则缺失时插入。问题处理完后停止：
+确认输出中的 mark 和链就是当前 PassWall/NetBird 规则后，可以注册为 procd 服务：
 
 ```sh
-pkill -f '/usr/bin/netbird-passwall-compat.sh'
+/etc/init.d/netbird-passwall-compat enable
+/etc/init.d/netbird-passwall-compat start
+/etc/init.d/netbird-passwall-compat status
 ```
+
+服务默认每 30 秒检查一次，只在规则缺失或 mark 变化时补回，不重复插入，也不会重启 NetBird、PassWall 或路由器。临时需要更快检查时，可用 `INTERVAL=5 /usr/bin/netbird-passwall-compat.sh --once` 做单次检查；已注册服务可这样临时改为 10 秒：
+
+```sh
+INTERVAL=10 /etc/init.d/netbird-passwall-compat restart
+```
+
+停止并取消开机启动：
+
+```sh
+/etc/init.d/netbird-passwall-compat disable
+/etc/init.d/netbird-passwall-compat stop
+```
+
+如果之前手动用 `nohup` 启动过旧进程，先执行一次 `pkill -f '[n]etbird-passwall-compat.sh'`，再启用服务，避免手动进程和 procd 同时运行。
 
 ### `netbird-dnsmasq-wt0-fix.sh`
 
@@ -77,4 +93,4 @@ pkill -f '/usr/bin/netbird-passwall-compat.sh'
 netbird up --disable-dns=false
 ```
 
-涉及配置修改的命令都必须显式使用 `apply`、`restore` 或 `rollback`。后续新增脚本也只作为手动工具加入，并在这里补充触发条件和使用命令，不制作成内置常驻服务。
+涉及配置修改的命令都必须显式使用 `apply`、`restore` 或 `rollback`。后续新增脚本默认只作为手动工具加入；确需常驻时，单独提供服务文件和启用说明，不在固件中自动启用。

@@ -45,25 +45,33 @@ netbird up --disable-dns=false
 出现以下情况时使用 `netbird-passwall-compat.sh`：
 
 - NetBird 已创建 `netbird-mangle-prerouting` 链；
-- NetBird 重连或重启后，PassWall 的规则 `meta mark 0x50535731 return` 消失；
+- NetBird 重连或重启后，PassWall 的 mark 豁免规则消失；
 - 结果是 NetBird 流量绕过 PassWall，或 PassWall 的分流行为异常。
 
-先检查：
+单次检查并在缺失时补规则：
 
 ```sh
-nft -a list chain ip netbird netbird-mangle-prerouting
+/usr/bin/netbird-passwall-compat.sh --once
 ```
 
-确认保护规则缺失后，手动启动检查脚本：
+确认输出的 PassWall mark 和 NetBird 链正确后，可以注册为开机服务：
 
 ```sh
-nohup /usr/bin/netbird-passwall-compat.sh >/tmp/netbird-passwall-compat.log 2>&1 &
+/etc/init.d/netbird-passwall-compat enable
+/etc/init.d/netbird-passwall-compat start
 ```
 
-脚本每 30 秒检查一次，只在规则缺失时补回，不重复插入，也不会重启 NetBird、PassWall 或路由器。冲突处理完后停止它：
+服务默认每 30 秒检查一次，只在规则缺失或 PassWall mark 变化时补回，不重复插入，也不会重启 NetBird、PassWall 或路由器。临时需要更快检查时，可用 `INTERVAL=5 /usr/bin/netbird-passwall-compat.sh --once` 做单次检查；已注册服务可这样临时改为 10 秒：
 
 ```sh
-pkill -f '/usr/bin/netbird-passwall-compat.sh'
+INTERVAL=10 /etc/init.d/netbird-passwall-compat restart
+```
+
+停止服务：
+
+```sh
+/etc/init.d/netbird-passwall-compat disable
+/etc/init.d/netbird-passwall-compat stop
 ```
 
 ### NetBird 与 dnsmasq 的 53 端口冲突
