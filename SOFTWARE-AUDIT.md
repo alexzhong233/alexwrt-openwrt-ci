@@ -22,6 +22,7 @@
 | `luci-app-package-manager` | 已显式选中，使用当前 LuCI feed |
 | `luci-app-store`、`luci-lib-taskd`、`luci-lib-xterm`、`taskd` | 从 `linkease/istore` 提取，满足 iStore 商店页及其任务依赖 |
 | `luci-app-systools` | 从 `linkease/openwrt-app-actions` 提取 |
+| `luci-app-istorepanel` | 从 `linkease/openwrt-app-actions/applications/luci-app-istorepanel` 提取，默认进入固件；它提供 1Panel 的 LuCI 管理入口 |
 | `luci-app-autoreboot`、`luci-app-gecoosac`、`luci-app-samba4`、`luci-app-upnp`、`luci-app-ttyd` | 已由通用配置或雅典娜配置纳入 |
 | NSS 固件、Wi-Fi NSS 驱动、`luci-app-nss` | 功能主体跟随 VIKING 上游，监控页面单独拉取 |
 | PassWall、OpenClash | 默认安装 |
@@ -35,7 +36,7 @@
 - ZeroTier：不纳入。
 - 易有云文件管理相关的 `luci-app-linkease`：不纳入。
 - WorkBuddy2API：不纳入固件。
-- 1Panel：清单中的 `luci-app-istorepanel` 就是 1Panel LuCI 支持包，按约定不纳入，手动安装。
+- 1Panel：`luci-app-istorepanel` 默认纳入；它是 LuCI 管理包，实际 1Panel 容器由页面按需部署。
 
 ## 说明
 

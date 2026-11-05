@@ -121,6 +121,12 @@ UPDATE_PACKAGE "openclash" "vernesong/OpenClash" "dev" "pkg"
 UPDATE_PACKAGE "passwall" "Openwrt-Passwall/openwrt-passwall" "main" "pkg"
 UPDATE_PACKAGE "passwall2" "Openwrt-Passwall/openwrt-passwall2" "main" "pkg"
 UPDATE_PACKAGE "dockerman" "lisaac/luci-app-dockerman" "master"
+# firewall4/APK 对版本字段按 SemVer 校验，不接受 Dockerman Makefile 当前的
+# "v0.5.26" 写法；去掉前缀后不改变软件版本，只修正打包元数据。
+DOCKERMAN_MAKEFILE="./package/luci-app-dockerman/applications/luci-app-dockerman/Makefile"
+if [ -f "$DOCKERMAN_MAKEFILE" ]; then
+	sed -i 's/^PKG_VERSION:=v/PKG_VERSION:=/' "$DOCKERMAN_MAKEFILE"
+fi
 UPDATE_TOPLEVEL_PACKAGE "luci-app-athena-led" "NONGFAH/luci-app-athena-led" "main"
 UPDATE_TOPLEVEL_PACKAGE "luci-app-harbor-file" "destan19/luci-app-harbor-file" "main"
 UPDATE_TOPLEVEL_PACKAGE "vlmcsd" "mchome/openwrt-vlmcsd" "master"
@@ -184,8 +190,12 @@ UPDATE_PACKAGE "uugamebooster" "xiaodoudou/luci-app-uugamebooster" "master" "pkg
 UPDATE_PACKAGE "quickfile" "sbwml/luci-app-quickfile" "main"
 
 # 当前路由器使用的 SysTools 来自 LinkEase 应用扩展仓库。
-# 不提取 luci-app-istorepanel，因为它对应 1Panel，按约定由用户手动安装。
 UPDATE_PACKAGE "systools" "linkease/openwrt-app-actions" "main" "pkg"
+
+# 1Panel LuCI 管理页。当前公开包位于 openwrt-app-actions 的嵌套目录，
+# 直接提取 luci-app-istorepanel；找不到目录时让 CI 明确失败，避免生成
+# 一个看似成功但缺少 1Panel 的固件。
+UPDATE_NESTED_PACKAGE "luci-app-istorepanel" "linkease/openwrt-app-actions" "main" "applications/luci-app-istorepanel"
 
 # iStore 商店及其任务组件来自同一仓库的嵌套软件包目录。
 UPDATE_NESTED_PACKAGE "luci-app-store" "linkease/istore" "main" "luci/luci-app-store"
