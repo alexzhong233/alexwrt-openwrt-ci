@@ -63,7 +63,7 @@ Config——自定义配置
 本仓库增加了针对京东云雅典娜 `jdcloud_re-cs-02` 的构建入口：
 
 - 工作流：`.github/workflows/NIUBIALEX.yml`
-- 设备配置：`Config/IPQ60XX-NIUBIALEX.txt`
+- 设备配置：`Config/IPQ60XX-NIUBIALEX-WIFI-YES.txt`
 - 软件包处理：`Scripts/Packages.sh`
 - 固件文件注入：`Files/RE-CS-02/`
 - 构建说明：[README-NIUBIALEX.md](README-NIUBIALEX.md)

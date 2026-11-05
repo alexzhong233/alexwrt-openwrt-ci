@@ -22,6 +22,13 @@
 - ZeroTier、易有云文件管理器和 WorkBuddy2API 不进入固件；WorkBuddy2API 按需通过 Docker 部署。
 - 详细软件清单核对见 [SOFTWARE-AUDIT.md](SOFTWARE-AUDIT.md)。
 
+## 软件源与固件文件名
+
+- 软件源已换成国内镜像：`Files/RE-CS-02/etc/apk/repositories.d/distfeeds.list` 把 `/etc/apk/repositories.d/distfeeds.list` 整体覆盖为南京大学镜像（NJU）加 iStore 仓库。该文件在 base-files 生成默认源之后注入，因此优先生效，`apk update` / 装包不再走 `downloads.immortalwrt.org`。
+- 想加自己的源，不要改 `distfeeds.list`（升级后会被覆盖），写到 `/etc/apk/repositories.d/customfeeds.list`。
+- 固件每次编译产出两个镜像：`...-squashfs-factory.bin`（首次刷机/救砖，走 U-Boot 或原厂 web 刷）和 `...-squashfs-sysupgrade.bin`（系统内升级用）。两者内容一致，只是封装格式不同。
+- 文件名里的 `WIFI-YES` 来自配置名 `Config/IPQ60XX-NIUBIALEX-WIFI-YES.txt` 的结尾；改配置名会同时改变固件文件名与 Release tag。
+
 ## 脚本使用原则
 
 除特别说明外，所有脚本都只是手动工具，放在 `/usr/bin/`，不会自动注册为服务。`netbird-passwall-compat` 提供可选的 procd 服务文件，但不会自动 `enable`；只有明确运行命令后才会检查或修改配置。

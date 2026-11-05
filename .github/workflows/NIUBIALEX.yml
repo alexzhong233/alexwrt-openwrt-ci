@@ -26,7 +26,9 @@ jobs:
     name: jdcloud_re-cs-02
     uses: ./.github/workflows/WRT-CORE.yml
     with:
-      WRT_CONFIG: IPQ60XX-NIUBIALEX
+      # 末尾的 -WIFI-YES 是必要的：WRT-CORE 用它来给固件文件名打 WIFI 标记，
+      # 不写就会被识别成 none，文件名变成 ...-none-<日期>.bin
+      WRT_CONFIG: IPQ60XX-NIUBIALEX-WIFI-YES
       WRT_THEME: aurora
       WRT_NAME: niubiAlex
       WRT_SSID: niubiAlex

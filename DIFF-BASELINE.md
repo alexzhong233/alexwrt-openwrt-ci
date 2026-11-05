@@ -29,7 +29,7 @@ on:
 工作流把编译参数固定为：
 
 ```yaml
-WRT_CONFIG: IPQ60XX-NIUBIALEX
+WRT_CONFIG: IPQ60XX-NIUBIALEX-WIFI-YES
 WRT_REPO: https://github.com/VIKINGYFY/immortalwrt.git
 WRT_BRANCH: owrt
 WRT_SOURCE: VIKINGYFY/immortalwrt
@@ -75,7 +75,7 @@ fi
 
 ## 3. 雅典娜设备配置
 
-文件：`Config/IPQ60XX-NIUBIALEX.txt`
+文件：`Config/IPQ60XX-NIUBIALEX-WIFI-YES.txt`
 
 新增目标设备选择：
 
