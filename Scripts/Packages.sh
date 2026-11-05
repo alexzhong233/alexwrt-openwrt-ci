@@ -139,6 +139,45 @@ UPDATE_NESTED_PACKAGE "luci-app-athena-led" \
 	"luci-app-athena-led"
 UPDATE_TOPLEVEL_PACKAGE "luci-app-harbor-file" "destan19/luci-app-harbor-file" "main"
 UPDATE_TOPLEVEL_PACKAGE "vlmcsd" "mchome/openwrt-vlmcsd" "master"
+# vlmcsd 的旧版 GNUmakefile 与 OpenWrt 的 ccache 包装器不兼容：它会把多个
+# C 文件错误地传给同一个 gcc -c -o 命令。使用真实交叉编译器并串行构建。
+VLMCSD_MAKEFILE="./package/vlmcsd/Makefile"
+if [ -f "$VLMCSD_MAKEFILE" ]; then
+	python3 - "$VLMCSD_MAKEFILE" <<'PYEOF'
+import re
+import sys
+
+path = sys.argv[1]
+content = open(path, encoding="utf-8").read()
+
+content = re.sub(r"\ndefine Build/Compile\n.*?endef\n", "\n", content, flags=re.S)
+compile_block = r'''
+define Build/Compile
+	$(MAKE) -j1 -C $(PKG_BUILD_DIR) \
+		CC="$(TARGET_CC_NOCACHE)" \
+		CXX="$(TARGET_CXX_NOCACHE)" \
+		AR="$(TARGET_AR)" \
+		RANLIB="$(TARGET_RANLIB)" \
+		STRIP="$(STRIP)" \
+		AS="$(TARGET_CROSS)as" \
+		LD="$(TARGET_LD)" \
+		CFLAGS="$(TARGET_CFLAGS) $(TARGET_CPPFLAGS)" \
+		LDFLAGS="$(TARGET_LDFLAGS)" \
+		CROSS="$(TARGET_CROSS)" \
+		ARCH="$(ARCH)" \
+		MAX_THREADS=1
+endef
+'''
+
+marker = "$(eval $(call BuildPackage,vlmcsd))"
+if marker not in content:
+    raise SystemExit("vlmcsd BuildPackage marker not found")
+if "TARGET_CC_NOCACHE" not in content:
+    content = content.replace(marker, compile_block + "\n" + marker, 1)
+
+open(path, "w", encoding="utf-8", newline="").write(content)
+PYEOF
+fi
 UPDATE_TOPLEVEL_PACKAGE "luci-app-vlmcsd" "mchome/luci-app-vlmcsd" "master"
 UPDATE_NESTED_PACKAGE "luci-app-netbird" "looong-cat/luci-app-netbird" "main" "luci-app-netbird"
 
