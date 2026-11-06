@@ -2,6 +2,9 @@
 
 # Apply the requested first-boot Wi-Fi layout once. Existing settings are
 # intentionally not touched after this script has run.
+#
+# @WRT_SSID@ / @WRT_WORD@ 是占位符，编译时由 Scripts/Settings.sh 用
+# NIUBIALEX.yml 里的 WRT_SSID / WRT_WORD 入参替换。直接改这里的字面量没有用。
 
 set -u
 
@@ -20,27 +23,27 @@ for section in $(uci show wireless 2>/dev/null | sed -n "s/^wireless\.\([^.=]*\)
 
 	case "$band:$path" in
 		2g:*)
-			uci set "wireless.$iface.ssid=niubiAlex"
+			uci set "wireless.$iface.ssid=@WRT_SSID@"
 			uci set "wireless.$section.channel=5"
 			uci set "wireless.$section.htmode=HE40"
-			uci set "wireless.$iface.encryption=psk2+ccmp"
-			uci set "wireless.$iface.key=88888888"
 			;;
 		5g:*pci*)
-			uci set "wireless.$iface.ssid=niubiAlexGaming"
+			uci set "wireless.$iface.ssid=@WRT_SSID@Gaming"
 			uci set "wireless.$section.channel=36"
 			uci set "wireless.$section.htmode=HE160"
-			uci set "wireless.$iface.encryption=psk2+ccmp"
-			uci set "wireless.$iface.key=88888888"
 			;;
 		5g:*)
-			uci set "wireless.$iface.ssid=niubiAlex"
+			uci set "wireless.$iface.ssid=@WRT_SSID@"
 			uci set "wireless.$section.channel=161"
 			uci set "wireless.$section.htmode=HE80"
-			uci set "wireless.$iface.encryption=psk2+ccmp"
-			uci set "wireless.$iface.key=88888888"
+			;;
+		*)
+			continue
 			;;
 	esac
+
+	uci set "wireless.$iface.encryption=psk2+ccmp"
+	uci set "wireless.$iface.key=@WRT_WORD@"
 done
 
 uci commit wireless

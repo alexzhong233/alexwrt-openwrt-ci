@@ -1,15 +1,16 @@
 # niubiAlex 与 VIKINGYFY/OpenWRT-CI 基线的代码级对比
 
-对比基线：本地 `upstream/main`。
+对比基线：上游 `VIKINGYFY/OpenWRT-CI` 的 `main`。
 
 查看完整原始差异：
 
 ```sh
-cd /Users/alex/Projects/niubiAlex-openwrt-ci
+git remote add upstream https://github.com/VIKINGYFY/OpenWRT-CI.git  # 仅首次
+git fetch upstream
 git diff upstream/main..HEAD
 ```
 
-当前自定义层相对基线涉及 18 个文件，新增或修改约 1030 行。
+> 本文是撰写时的快照，文件数和行数为当时数据。后续增删工作流、改动脚本后会有出入，以 `git diff` 实际结果为准。
 
 ## 1. 编译入口
 

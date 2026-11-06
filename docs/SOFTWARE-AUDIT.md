@@ -42,4 +42,4 @@
 
 `luci-app-store` 的源码已从 `linkease/istore` 的公开嵌套目录提取；它在编译时还会下载对应版本的 iStore UI 前端资源。`luci-app-package-manager` 和 `luci-app-systools` 也已纳入，提供软件包管理和系统维护能力。
 
-NetBird 的 DNS、PassWall 标记和 dnsmasq `wt0` 冲突脚本会随固件安装，但不会自动启动；使用方法见 `README-SCRIPTS.md`。本机访问外网需要时可临时设置 `127.0.0.1:7897`，该地址不会写入固件或 GitHub Actions 配置。
+NetBird 的 DNS、PassWall 标记和 dnsmasq `wt0` 冲突脚本会随固件安装，但不会自动启动；使用方法见 `../README-SCRIPTS.md`。本机访问外网需要时可临时设置 `127.0.0.1:7897`，该地址不会写入固件或 GitHub Actions 配置。

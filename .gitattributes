@@ -1,3 +1,8 @@
+# 统一 LF：注入固件的脚本会被路由器直接执行，CRLF 会让 shebang 失效
 *.txt text eol=lf
 *.sh text eol=lf
 *.list text eol=lf
+*.yml text eol=lf
+*.md text eol=lf
+# Files/ 下有 etc/init.d、etc/uci-defaults 这类没有扩展名的脚本
+Files/** text eol=lf

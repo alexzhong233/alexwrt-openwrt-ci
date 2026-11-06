@@ -48,7 +48,7 @@ https://drive.wrt.moe/uboot/mediatek
 
 固件信息里的时间为编译开始的时间，方便核对上游源码提交时间。
 
-MEDIATEK系列、QUALCOMMAX系列、ROCKCHIP系列、X86系列。
+当前只编译 QUALCOMMAX 系列的京东云雅典娜 `jdcloud_re-cs-02`。
 
 # 目录简要说明
 
@@ -68,7 +68,7 @@ Config——自定义配置
 - 固件文件注入：`Files/RE-CS-02/`
 - 构建说明：[README-NIUBIALEX.md](README-NIUBIALEX.md)
 - 脚本说明：[README-SCRIPTS.md](README-SCRIPTS.md)
-- 基线代码级对比：[DIFF-BASELINE.md](DIFF-BASELINE.md)
+- 分析文档（基线对比、仓库对比、软件清单）：[docs/](docs/)
 - 固件内说明副本：`Files/RE-CS-02/usr/share/niubiAlex/`
 
 这套构建使用 `VIKINGYFY/immortalwrt` 的 `owrt` 分支，目标设备限定为 `jdcloud_re-cs-02`。它加入了：
