@@ -19,11 +19,28 @@ end
 local port = uci:get("workbuddy2api", "main", "port") or "8788"
 local host = uci:get("workbuddy2api", "main", "host") or "0.0.0.0"
 
--- 绑 0.0.0.0 时用浏览器当前的地址拼面板链接，否则拿绑定的那个地址
-local cur = http.getenv("SERVER_NAME") or http.getenv("HTTP_HOST") or "192.168.1.1"
+-- 绑 0.0.0.0 时用浏览器当前的地址拼面板链接，否则拿绑定的那个地址。
+-- 优先 HTTP_HOST（用户此刻实际访问用的地址），退化到设备 LAN 的静态地址，
+-- 都拿不到就留空 —— 不要写死任何 IP，本项目的 LAN 段是可配的（当前 192.168.88.0/24）。
+local cur = http.getenv("HTTP_HOST") or http.getenv("SERVER_NAME") or ""
 cur = cur:gsub(":%d+$", "")
-local panel_host = (host == "0.0.0.0" or host == "::" or host == "") and cur or host
-local panel_url = string.format("http://%s:%s/", panel_host, port)
+if cur == "" then
+	cur = uci:get("network", "lan", "ipaddr") or ""
+end
+-- 通配/回环地址拼不出能用的链接，按「未知」处理
+if cur == "0.0.0.0" or cur == "::" or cur == "[::]" or cur == "[::1]" or cur == "127.0.0.1" then
+	cur = ""
+end
+
+local panel_host = host
+if host == "0.0.0.0" or host == "::" or host == "" or host == "127.0.0.1" or host == "::1" then
+	panel_host = cur
+end
+-- 拿不到主机地址时不拼半截链接（"http://:8788/"），交给模板只显示端口
+local panel_url = nil
+if panel_host and panel_host ~= "" then
+	panel_url = string.format("http://%s:%s/", panel_host, port)
+end
 
 local action_url = disp.build_url("admin", "services", "workbuddy2api", "action")
 local log = sys.exec("logread -e workbuddy2api 2>/dev/null | tail -n 20")
@@ -62,7 +79,12 @@ local log = sys.exec("logread -e workbuddy2api 2>/dev/null | tail -n 20")
 			<tr class="cbi-section-table-row">
 				<td class="cbi-value-title">管理面板</td>
 				<td>
-					<a href="<%=panel_url%>" target="_blank" rel="noopener"><%=panel_url%></a>
+					<% if panel_url then %>
+						<a href="<%=panel_url%>" target="_blank" rel="noopener"><%=panel_url%></a>
+					<% else %>
+						<code>:<%=port%></code>
+						<span class="ifacebadge">无法确定本机地址，请用路由器的 LAN 地址加上面的端口访问</span>
+					<% end %>
 					<span class="ifacebadge">账号管理、用量统计、OAuth 授权都在面板里完成</span>
 				</td>
 			</tr>
