@@ -4,23 +4,37 @@
 name: Cache-Clean
 
 on:
-  #自动清理：每周一早上4点
-  schedule:
-    - cron: 0 20 * * 0
-  #手动清理
+  # 构建结束之后再清理，避免像以前那样在编译前一小时把缓存全删掉，
+  # 导致每次都要重新编译 host 工具链（冷编译 4 小时 vs 热编译 1 小时）。
+  workflow_run:
+    workflows: [NIUBIALEX]
+    types: [completed]
+  # 手动清理
   workflow_dispatch:
 
-permissions: write-all
-
-env:
-  GITHUB_TOKEN: ${{secrets.GITHUB_TOKEN}}
+permissions:
+  actions: write
 
 jobs:
   cleanup:
+    # 只有构建成功才会有新缓存写进来；失败的运行不清理，保留上一次可用的缓存。
+    if: ${{ github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success' }}
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout Projects
-        uses: actions/checkout@main
+      - name: Prune Old Caches
+        env:
+          GH_TOKEN: ${{secrets.GITHUB_TOKEN}}
+          GH_REPO: ${{github.repository}}
+        run: |
+          set -euo pipefail
 
-      - name: Cache Clean
-        run: gh cache delete --all
+          # 构建内部已经由 cache-rollover 按 key 前缀收拢过一代，这里保留最新
+          # 创建的那一份（下次构建就是用它回滚），其余全部删除，防止撞上仓库
+          # 10 GB 的缓存总额限制。
+          gh cache list --repo "$GH_REPO" --limit 100 --json id,key,createdAt \
+            --jq 'sort_by(.createdAt) | reverse | .[1:] | .[].id' |
+            while read -r CACHE_ID; do
+              [ -n "$CACHE_ID" ] || continue
+              gh cache delete "$CACHE_ID" --repo "$GH_REPO" ||
+                echo "warning: failed to delete cache $CACHE_ID"
+            done

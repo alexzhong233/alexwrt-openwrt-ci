@@ -6,11 +6,30 @@
 # 任何一次 clone 失败都直接中止构建：以前失败后会继续往下跑，make defconfig
 # 静默丢弃找不到源码的包，最后产出一个"构建成功"但少插件的固件。
 # 分支传空字符串时不加 --single-branch，供 sparse checkout 之类场景使用。
+#
+# 同一个仓库在一次构建里经常要被取多次（linkease/istore 有 4 个包、
+# openwrt-app-actions 2 个、athena-led 控制器 2 个）。第一次克隆后留一份
+# 缓存，后续直接本地复制，省掉重复的网络往返。
+CLONE_CACHE_ROOT=${CLONE_CACHE_ROOT:-${TMPDIR:-/tmp}/wrt-clone-cache}
+mkdir -p "$CLONE_CACHE_ROOT"
+
 clone_repo() {
 	local REPO=$1
 	local BRANCH=$2
 	local DEST=$3
 	shift 3
+
+	# 带额外参数的调用（sparse checkout 等）不走缓存。
+	local CACHED=""
+	if [ $# -eq 0 ]; then
+		CACHED="$CLONE_CACHE_ROOT/$(printf '%s@%s' "$REPO" "${BRANCH:-HEAD}" | tr '/:' '__')"
+		if [ -d "$CACHED" ]; then
+			rm -rf "$DEST"
+			mkdir -p "$(dirname "$DEST")"
+			cp -a "$CACHED" "$DEST"
+			return 0
+		fi
+	fi
 
 	local -a ARGS=(--depth=1)
 	if [ -n "$BRANCH" ]; then
@@ -21,6 +40,11 @@ clone_repo() {
 		echo "::error::Failed to clone $REPO (branch: ${BRANCH:-default}) into $DEST" >&2
 		rm -rf "$DEST"
 		exit 1
+	fi
+
+	if [ -n "$CACHED" ]; then
+		rm -rf "$CACHED"
+		cp -a "$DEST" "$CACHED"
 	fi
 }
 
@@ -265,7 +289,6 @@ cp -a "$NSS_TMP/luci-app-nss/htdocs" ./package/luci-app-nss/
 cp -a "$NSS_TMP/luci-app-nss/root" ./package/luci-app-nss/
 rm -rf "$NSS_TMP"
 
-UPDATE_PACKAGE "diskmanager" "4IceG/luci-app-mini-diskmanager" "main"
 UPDATE_PACKAGE "easytier" "EasyTier/luci-app-easytier" "main"
 UPDATE_PACKAGE "qmodem" "FUjr/QModem" "main"
 UPDATE_PACKAGE "viking" "VIKINGYFY/packages" "main" "" "axonhub gecoosac miniupnpd sing-box luci-app-homeproxy luci-app-timewol luci-app-upnp luci-app-wolplus luci-app-wolultra"

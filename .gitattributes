@@ -4,5 +4,19 @@
 *.list text eol=lf
 *.yml text eol=lf
 *.md text eol=lf
-# Files/ 下有 etc/init.d、etc/uci-defaults 这类没有扩展名的脚本
-Files/** text eol=lf
+
+# Files/ 下面既有没扩展名的脚本（etc/init.d、etc/uci-defaults），以后也可能放
+# 二进制（.bin、.png、.gz）。不能像以前那样整目录 `Files/** text eol=lf`——那会
+# 把二进制也当文本做换行转换，直接损坏文件。这里先默认按二进制（不转换），再把
+# 已确认是文本的路径单独标回 text；同名规则里后面的覆盖前面的。
+Files/** -text
+Files/**/*.sh text eol=lf
+Files/**/*.list text eol=lf
+Files/**/*.md text eol=lf
+Files/**/etc/init.d/* text eol=lf
+Files/**/etc/uci-defaults/* text eol=lf
+Files/**/etc/config/* text eol=lf
+Files/**/etc/apk/repositories.d/* text eol=lf
+Files/**/etc/crontabs/* text eol=lf
+Files/**/usr/bin/* text eol=lf
+Files/**/usr/sbin/* text eol=lf

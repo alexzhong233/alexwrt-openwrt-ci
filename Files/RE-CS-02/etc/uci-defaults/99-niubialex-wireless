@@ -1,47 +1,101 @@
 #!/bin/sh
 
-# Apply the requested first-boot Wi-Fi layout once. Existing settings are
-# intentionally not touched after this script has run.
+# First-boot Wi-Fi layout for the JDCloud RE-CS-02 (AX6600).
+# Runs once only: a successful /etc/uci-defaults script removes itself.
+# Existing settings are intentionally not touched after this script has run.
 #
 # @WRT_SSID@ / @WRT_WORD@ 是占位符，编译时由 Scripts/Settings.sh 用
 # NIUBIALEX.yml 里的 WRT_SSID / WRT_WORD 入参替换。直接改这里的字面量没有用。
 
 set -u
 
+# RE-CS-02 有三个 radio：内置 2.4G、内置 5G（2x2，最高 HE80），以及外挂的
+# 4x4 5G 卡（HE160，接在 PCIe 总线上）。
+#
+# 判断"是不是外挂卡"不能靠 `case "$path" in *pci*)`：那是在匹配 uci 里
+# path 的字符串写法，上游只要把 path 换成别的形式（缩短成 phy 名、改用
+# MAC 等），匹配就会静默失效，把外挂卡当成内置卡配成 161/HE80，Gaming
+# 那个 SSID 直接消失。这里改为解析 sysfs 里真实的设备路径：PCI 设备的
+# 路径一定形如 /sys/devices/pci0000:00/0000:01:00.0/...。
+is_pcie_radio() {
+	local path=$1
+
+	[ -n "$path" ] || return 1
+
+	local resolved
+	resolved=$(readlink -f "/sys/devices/$path" 2>/dev/null) || resolved=""
+
+	if [ -n "$resolved" ]; then
+		case "$resolved" in
+			*/pci[0-9]*:*) return 0 ;;
+			*) return 1 ;;
+		esac
+	fi
+
+	# sysfs 里查不到（path 写法变了）：退回字符串判断，至少保留旧行为。
+	case "$path" in
+		*pci*) return 0 ;;
+		*) return 1 ;;
+	esac
+}
+
+# 取该 radio 的主 iface：优先 network 里带 lan 的那个（默认主 SSID），
+# 跳过 disabled 的。原来的做法是"取第一个匹配"，某个 radio 一旦多出一个
+# 访客网络 / IoT 网络就会取到一个错的 iface。
+pick_iface() {
+	local dev=$1
+	local candidate fallback=""
+
+	for candidate in $(uci show wireless 2>/dev/null | sed -n "s/^wireless\.\([^.=]*\)=wifi-iface$/\1/p"); do
+		[ "$(uci -q get "wireless.$candidate.device" || true)" = "$dev" ] || continue
+		[ "$(uci -q get "wireless.$candidate.disabled" || echo 0)" = "1" ] && continue
+
+		case "$(uci -q get "wireless.$candidate.network" || true)" in
+			*lan*)
+				echo "$candidate"
+				return 0
+				;;
+		esac
+
+		[ -n "$fallback" ] || fallback=$candidate
+	done
+
+	[ -n "$fallback" ] || return 1
+	echo "$fallback"
+}
+
 for section in $(uci show wireless 2>/dev/null | sed -n "s/^wireless\.\([^.=]*\)=wifi-device$/\1/p"); do
 	band=$(uci -q get "wireless.$section.band" || true)
 	path=$(uci -q get "wireless.$section.path" || true)
-	iface=""
 
-	for candidate in $(uci show wireless 2>/dev/null | sed -n "s/^wireless\.\([^.=]*\)=wifi-iface$/\1/p"); do
-		[ "$(uci -q get "wireless.$candidate.device" || true)" = "$section" ] || continue
-		iface=$candidate
-		break
-	done
-
-	[ -n "$iface" ] || continue
-
-	case "$band:$path" in
-		2g:*)
-			uci set "wireless.$iface.ssid=@WRT_SSID@"
-			uci set "wireless.$section.channel=5"
-			uci set "wireless.$section.htmode=HE40"
+	case "$band" in
+		2g)
+			ssid="@WRT_SSID@"
+			channel=5
+			htmode=HE40
 			;;
-		5g:*pci*)
-			uci set "wireless.$iface.ssid=@WRT_SSID@Gaming"
-			uci set "wireless.$section.channel=36"
-			uci set "wireless.$section.htmode=HE160"
-			;;
-		5g:*)
-			uci set "wireless.$iface.ssid=@WRT_SSID@"
-			uci set "wireless.$section.channel=161"
-			uci set "wireless.$section.htmode=HE80"
+		5g)
+			if is_pcie_radio "$path"; then
+				ssid="@WRT_SSID@Gaming"
+				channel=36
+				htmode=HE160
+			else
+				ssid="@WRT_SSID@"
+				channel=161
+				htmode=HE80
+			fi
 			;;
 		*)
 			continue
 			;;
 	esac
 
+	iface=$(pick_iface "$section" || true)
+	[ -n "$iface" ] || continue
+
+	uci set "wireless.$iface.ssid=$ssid"
+	uci set "wireless.$section.channel=$channel"
+	uci set "wireless.$section.htmode=$htmode"
 	uci set "wireless.$iface.encryption=psk2+ccmp"
 	uci set "wireless.$iface.key=@WRT_WORD@"
 done

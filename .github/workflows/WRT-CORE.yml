@@ -352,6 +352,10 @@ jobs:
 
       - name: Save Build Cache
         if: ${{ !inputs.WRT_TEST && success() && steps.cache-restore.outputs.cache-hit != 'true' }}
+        # 缓存超过仓库 10 GB 上限时 save 会直接报错。这一步排在打包发版之前，
+        # 失败会把整个 job 判为失败，导致固件已经编译完成却发不出去。缓存是
+        # 纯加速手段，失败不应该影响交付。
+        continue-on-error: true
         uses: actions/cache/save@main
         with:
           key: ${{env.WRT_CACHE_KEY}}
@@ -393,14 +397,30 @@ jobs:
 
             find ./bin/targets/ -type f -exec mv -f {} ./upload/ \;
 
-            make clean -j$(nproc)
+            # 上游的 sha256sums 已在上面删掉（里面的文件名都对不上改名后的
+            # 固件），这里按最终文件名重新生成一份，刷机前可以校验完整性。
+            ( cd ./upload &&
+              find . -maxdepth 1 -type f ! -name SHA256SUMS -printf '%f\n' |
+                sort | xargs -r sha256sum > SHA256SUMS )
           fi
 
+      # TEST 模式只生成配置、不编译固件，如果照样走 Release 就会在仓库里
+      # 留下一个只有 Config txt 的"假固件"版本，干扰版本管理和清理逻辑。
+      - name: Upload Config Only
+        if: ${{ inputs.WRT_TEST }}
+        uses: actions/upload-artifact@v7
+        with:
+          name: config-${{env.WRT_CONFIG}}-${{env.WRT_DATE}}
+          path: ./wrt/upload/
+          retention-days: 7
+
       - name: Release Firmware
+        if: ${{ !inputs.WRT_TEST }}
         uses: softprops/action-gh-release@master
         with:
           tag_name: ${{env.WRT_CONFIG}}-${{env.WRT_INFO}}-${{env.WRT_BRANCH}}-${{env.WRT_DATE}}
-          files: ./wrt/upload/*.*
+          # 用 * 而不是 *.*：SHA256SUMS 这类没有扩展名的文件也要一起发布。
+          files: ./wrt/upload/*
           body: |
             这是个平台固件包，内含多个设备！
             请注意选择你需要的设备固件！

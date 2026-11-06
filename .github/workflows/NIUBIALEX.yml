@@ -5,8 +5,10 @@ name: NIUBIALEX
 
 on:
   schedule:
-    # GitHub Actions 使用 UTC；每天北京时间 06:00 左右触发。
-    - cron: '0 22 * * *'
+    # GitHub Actions 使用 UTC；每天北京时间 06:17 触发。
+    # 不要写成整点：GitHub 在每小时 00 分负载最高，整点的定时任务经常被
+    # 延迟几十分钟甚至直接丢弃，错开几分钟能明显提高准时率。
+    - cron: '17 22 * * *'
   workflow_dispatch:
     inputs:
       PACKAGE:
