@@ -213,6 +213,18 @@ jobs:
             ./wrt/staging_dir/host*
             ./wrt/staging_dir/tool*
 
+      # dl/ 是编译用的源码 tarball（这个配置大概 1~2 GB），以前每轮都从头
+      # 下次下载，网络一慢这一步就是十几分钟起步。单独给它一份缓存：key 带上
+      # Config 的哈希，配置不变就一直命中，配置变了才重新下一份。
+      - name: Restore Download Cache
+        id: cache-dl
+        if: ${{ !inputs.WRT_TEST }}
+        uses: actions/cache/restore@main
+        with:
+          path: ./wrt/dl
+          key: wrt-dl-${{env.WRT_CACHE_TARGET}}-${{ hashFiles('Config/*.txt') }}
+          restore-keys: wrt-dl-${{env.WRT_CACHE_TARGET}}-
+
       - name: Prepare Restored Build Cache
         if: ${{ !inputs.WRT_TEST && steps.cache-restore.outputs.cache-matched-key != '' }}
         run: |
@@ -513,6 +525,15 @@ jobs:
           name: build-reports-${{env.WRT_CONFIG}}-${{env.WRT_INFO}}-${{github.run_attempt}}
           path: ./build-reports/
           retention-days: 7
+
+      - name: Save Download Cache
+        # 同 Save Build Cache：缓存只是加速手段，超限或失败都不该影响交付。
+        if: ${{ !inputs.WRT_TEST && success() && steps.cache-dl.outputs.cache-hit != 'true' }}
+        continue-on-error: true
+        uses: actions/cache/save@main
+        with:
+          path: ./wrt/dl
+          key: wrt-dl-${{env.WRT_CACHE_TARGET}}-${{ hashFiles('Config/*.txt') }}
 
       - name: Save Build Cache
         if: ${{ !inputs.WRT_TEST && success() && steps.cache-restore.outputs.cache-hit != 'true' }}
