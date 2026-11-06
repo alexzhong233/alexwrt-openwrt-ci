@@ -58,8 +58,8 @@ SSID 和密码来自 `NIUBIALEX.yml` 的 `WRT_SSID` / `WRT_WORD`：编译时 `Sc
 
 ## 软件源与固件文件
 
-- 软件源走国内镜像：`Files/RE-CS-02/etc/apk/repositories.d/distfeeds.list` 整体覆盖 `/etc/apk/repositories.d/distfeeds.list`，指向南京大学镜像（NJU）加 iStore。它在 base-files 生成默认源之后注入，所以优先于官方源生效。
-- 要加自己的源请写 `/etc/apk/repositories.d/customfeeds.list`，直接改 `distfeeds.list` 会在固件升级后被覆盖。
+- 软件源保持上游默认：`/etc/apk/repositories.d/distfeeds.list` 由 base-files 在编译时按 `feeds.conf.default` 自动生成（指向 downloads.immortalwrt.org），仓库不再覆盖它。
+- 要换镜像或加自己的源请写 `/etc/apk/repositories.d/customfeeds.list`，它会在 `distfeeds.list` 之后加载；直接改 `distfeeds.list` 会在固件升级后被覆盖。
 - 每次编译产出两个镜像：`...-squashfs-factory.bin`（首次刷机/救砖，走 U-Boot 或原厂 web 后台）和 `...-squashfs-sysupgrade.bin`（系统内升级）。两者内容一致，只是封装不同。
 
 ## 脚本
