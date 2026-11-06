@@ -224,7 +224,14 @@ jobs:
           $GITHUB_WORKSPACE/Scripts/Settings.sh
           $GITHUB_WORKSPACE/.github/scripts/prepare-build-host.sh
 
-          make defconfig -j$(nproc) && make clean -j$(nproc)
+          # defconfig 的输出留一份：某个包依赖的库不存在时，OpenWrt 只打一行
+          # WARNING，包本身照样进 .config，要等两小时后打包 rootfs 才会以
+          # "unable to select packages" 失败。下面的 Verify 步骤会解析这份日志。
+          if ! make defconfig -j$(nproc) > "$GITHUB_WORKSPACE/defconfig.log" 2>&1; then
+            tail -60 "$GITHUB_WORKSPACE/defconfig.log"
+            exit 1
+          fi
+          make clean -j$(nproc)
 
       # make defconfig 遇到源码缺失、依赖不满足或包已改名的 CONFIG_PACKAGE
       # 不会报错，只会把那一行静默删掉，最终产出一个"构建成功"但少插件的固件。
@@ -309,6 +316,66 @@ jobs:
           fi
 
           echo "校验完成：配置中 $TOTAL 个 =y 软件包全部按预期进入 .config。"
+
+      # 依赖缺失只有到 rootfs 打包阶段才炸（apk 在 local 仓库里找不到依赖），
+      # 而那时已经编译了近两小时。defconfig 阶段其实已经打出 WARNING，这里提前
+      # 把「配置里选中的包 + 它缺的依赖」判成错误。
+      - name: Verify Package Dependencies
+        run: |
+          cd ./wrt/
+
+          DEPLOG="$GITHUB_WORKSPACE/defconfig.log"
+          IGNORE_FILE="$GITHUB_WORKSPACE/Config/verify-ignore.txt"
+          if [ ! -f "$DEPLOG" ]; then
+            echo "没有 defconfig.log，跳过依赖校验。"
+            exit 0
+          fi
+
+          # 形如：
+          # WARNING: Makefile 'package/feeds/luci/luci-app-systools/Makefile' has
+          #   a dependency on 'luci-lib-iform', which is not available
+          MISSING=$(grep -oE "WARNING: Makefile '[^']*' has a (build )?dependency on '[^']*', which is not available" "$DEPLOG" |
+            sed -E "s#^WARNING: Makefile '([^']*)'.*dependency on '([^']*)',.*#\2|\1#" | sort -u || true)
+
+          if [ -z "$MISSING" ]; then
+            echo "依赖校验通过：defconfig 没有报缺失依赖。"
+            exit 0
+          fi
+
+          FATAL=""; WARN=""
+          while IFS='|' read -r DEP SRC_MK; do
+            [ -z "$DEP" ] && continue
+            # 告警里的 Makefile 路径 → 目录名，绝大多数情况就是包名
+            SRC_DIR=$(basename "$(dirname "$SRC_MK")")
+
+            if [ -f "$IGNORE_FILE" ] && grep -qxF "$DEP" "$IGNORE_FILE"; then
+              continue
+            fi
+
+            if grep -qxF "CONFIG_PACKAGE_$SRC_DIR=y" .config; then
+              FATAL="$FATAL $SRC_DIR->$DEP"
+            else
+              WARN="$WARN $SRC_DIR->$DEP"
+            fi
+          done <<< "$MISSING"
+
+          if [ -n "$WARN" ]; then
+            echo "::warning::以下未被选中的包存在缺失依赖（不影响构建）："
+            for ITEM in $WARN; do echo "  warn: $ITEM"; done
+          fi
+
+          if [ -n "$FATAL" ]; then
+            echo "::error::以下已选中的包依赖的库不存在，打包 rootfs 时 apk 一定会失败"
+            for ITEM in $FATAL; do echo "  missing: $ITEM"; done
+            echo ""
+            echo "排查方向："
+            echo "  1. 该依赖是否已被上游 feed 移除/改名，需要像 luci-lib-docker 一样自己 clone"
+            echo "  2. 依赖是否写在 *_EXTRA_DEPENDS 里（不进编译，但会进包元数据），需要在配置里显式 CONFIG_PACKAGE_xxx=y"
+            echo "  3. 确认确实不需要，把依赖名写进 Config/verify-ignore.txt 后重跑"
+            exit 1
+          fi
+
+          echo "依赖校验完成：没有已选中包依赖缺失的库。"
 
       - name: Prepare Rust Toolchain
         if: ${{ !inputs.WRT_TEST }}

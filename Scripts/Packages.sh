@@ -181,6 +181,18 @@ DOCKERMAN_MAKEFILE="./package/luci-app-dockerman/applications/luci-app-dockerman
 if [ -f "$DOCKERMAN_MAKEFILE" ]; then
 	sed -i 's/^PKG_VERSION:=v/PKG_VERSION:=/' "$DOCKERMAN_MAKEFILE"
 fi
+
+# Dockerman 和 1Panel 面板都依赖 luci-lib-docker，而现在的 luci feed 只留下
+# luci-app-dockerman / luci-app-docker，早就不带这个库了。缺了它，.config 里
+# 两个面板照样选中，等到打包 rootfs 时 apk 才会报 "luci-lib-docker (no such
+# package)"。只能从 lisaac 的原仓库取。
+UPDATE_NESTED_PACKAGE "luci-lib-docker" "lisaac/luci-lib-docker" "master" "collections/luci-lib-docker"
+# 与 Dockerman 同样的 APK 版本号问题：上游写的是 v0.3.4。
+DOCKER_LIB_MAKEFILE="./package/luci-lib-docker/Makefile"
+if [ -f "$DOCKER_LIB_MAKEFILE" ]; then
+	sed -i 's/^PKG_VERSION:=v/PKG_VERSION:=/' "$DOCKER_LIB_MAKEFILE"
+fi
+
 # 雅典娜 RE-CS-02 LED：使用控制器仓库根目录下的两个 OpenWrt 软件包。
 # 该仓库没有 pkg/ 父目录，因此分别提取 athena-led 和 luci-app-athena-led。
 UPDATE_NESTED_PACKAGE "athena-led" \
@@ -311,6 +323,13 @@ if [ -d "$SYSTOOLS_PO/zh-cn" ] && [ ! -d "$SYSTOOLS_PO/zh_Hans" ]; then
 	mv "$SYSTOOLS_PO/zh-cn" "$SYSTOOLS_PO/zh_Hans"
 	echo "Renamed systools po/zh-cn -> po/zh_Hans so luci.mk emits the i18n package"
 fi
+
+# SysTools 的两个依赖任何 feed 都没有，缺了会在打包 rootfs 时挂掉：
+#   speedtestcli  —— 同仓 applications/speedtestcli，装的是预编译二进制
+#   luci-lib-iform —— LinkEase 的 NAS LuCI 仓库，systools 要求 >=1.1
+UPDATE_PACKAGE "speedtestcli" "linkease/openwrt-app-actions" "main" "pkg"
+UPDATE_NESTED_PACKAGE "luci-lib-iform" "linkease/nas-packages-luci" "main" "luci/luci-lib-iform"
+
 
 # 1Panel LuCI 管理页。当前公开包位于 openwrt-app-actions 的嵌套目录，
 # 直接提取 luci-app-istorepanel；找不到目录时让 CI 明确失败，避免生成
