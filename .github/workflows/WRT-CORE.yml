@@ -195,12 +195,31 @@ jobs:
           echo "1" > ./wrt/tmp/.build
           echo "restored build cache: ${{steps.cache-restore.outputs.cache-matched-key}}"
 
+      # feeds update 是从 GitHub 一次性浅克隆 6 个仓库，网络抽风时 git 会长时间
+      # 挂在那里不动（本轮就卡了 11 分钟没输出）。加硬超时 + 失败重来，
+      # 单次超过 8 分钟直接杀掉重新克隆，最多 3 次，避免整条流水线被一个卡死的
+      # git 连接拖到几小时。
       - name: Update Feeds
+        timeout-minutes: 45
         run: |
           cd ./wrt/
 
-          ./scripts/feeds update -a
-          ./scripts/feeds install -a
+          update_feeds() {
+            local i
+            for i in 1 2 3; do
+              echo "==> feeds update 第 $i 次尝试"
+              if timeout --signal=KILL 480 ./scripts/feeds update -a; then
+                return 0
+              fi
+              echo "::warning::feeds update 第 $i 次失败或超时（>8 分钟），清掉半成品重来"
+              rm -rf feeds/*
+              sleep 10
+            done
+            return 1
+          }
+
+          update_feeds
+          timeout --signal=KILL 480 ./scripts/feeds install -a
 
       - name: Custom Packages
         run: |
