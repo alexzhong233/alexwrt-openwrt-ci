@@ -4,15 +4,16 @@
 name: Auto-Clean
 
 on:
-  # 已停用定时清理：原配置会删除全部 Release（releases_keep_latest: 0）
-  # 和全部构建记录（workflows_keep_day: 0），一旦当天编译失败就没有任何
-  # 可用固件可回滚。需要清理时手动运行，或把下面 schedule 取消注释并把
-  # releases_keep_latest 改成 2~3（保留最近几个固件）。
-  # schedule:
-  #   - cron: 21 21 * * *
+  # 每天北京时间 05:21（比 06:00 的定时编译早 39 分钟）清理一次。
+  # 保留最近 3 个 Release（含挂在上面的固件）和最近 30 天的构建记录，
+  # 这样即使某天编译失败，手上仍然有可回滚的固件。
+  schedule:
+    - cron: 21 21 * * *
   workflow_dispatch:
 
-permissions: write-all
+permissions:
+  contents: write
+  actions: write
 
 jobs:
   auto_clean:
@@ -23,9 +24,10 @@ jobs:
         with:
           gh_token: ${{secrets.GITHUB_TOKEN}}
           delete_releases: true
-          # 0 = 一个都不留（含历史固件）。保留最近 3 个改成 3。
-          releases_keep_latest: 0
+          # 保留最近 3 个 Release（连同固件文件）。
+          releases_keep_latest: 3
+          # 被删掉的 Release 对应的 tag 一起删，避免 tag 越积越多。
           delete_tags: true
           delete_workflows: true
-          # 0 = 删除全部构建记录。保留 30 天改成 30。
-          workflows_keep_day: 0
+          # 保留最近 30 天的构建记录。
+          workflows_keep_day: 30
