@@ -92,7 +92,7 @@ jobs:
       # 自己会补上，整机升级对编译没有任何帮助。
       # 每条命令打时间戳，20 分钟没跑完直接失败，不会一直挂到 6 小时超时。
       - name: Initialization Environment
-        timeout-minutes: 20
+        timeout-minutes: 40
         env:
           DEBIAN_FRONTEND: noninteractive
           DEBCONF_NONINTERACTIVE_SEEN: "true"
@@ -107,7 +107,9 @@ jobs:
           echo 'precedence ::ffff:0:0/96  100' | sudo tee -a /etc/gai.conf >/dev/null
           getent ahosts github.com | head -3
 
-          APT=(-yqq -o Acquire::ForceIPv4=true -o Acquire::Retries=5
+          # 用 -q 而不是 -qq：-qq 会把 'Get:12 http://...' 这类进度全部吞掉，
+          # 下载慢的时候看起来就跟卡死一样。现在能看到在拉哪个包、多快。
+          APT=(-yq -o Acquire::ForceIPv4=true -o Acquire::Retries=5
                -o Acquire::http::Timeout=20 -o Acquire::https::Timeout=20
                -o Dpkg::Options::=--force-confdef -o Dpkg::Options::=--force-confold)
 
@@ -124,7 +126,7 @@ jobs:
           timeout --signal=KILL 120 sudo apt-get "${APT[@]}" purge firefox || true
 
           log "install toolchain"
-          timeout --signal=KILL 900 sudo apt-get install "${APT[@]}" --no-install-recommends \
+          timeout --signal=KILL 1800 sudo apt-get install "${APT[@]}" --no-install-recommends \
             bc bison build-essential bzip2 ca-certificates ccache clang \
             cmake cpio curl device-tree-compiler dos2unix file flex \
             g++-multilib gawk gcc-multilib genisoimage gettext git jq \
