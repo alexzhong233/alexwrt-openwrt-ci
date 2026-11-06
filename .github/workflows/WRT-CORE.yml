@@ -59,9 +59,6 @@ on:
 
 env:
   GITHUB_TOKEN: ${{secrets.GITHUB_TOKEN}}
-  # 任何一次 git 认证提示都会把步骤挂到 job 超时：仓库被删/改名或需要登录时，
-  # git 会等 stdin 输入用户名。设成 0 让它立刻报错退出。
-  GIT_TERMINAL_PROMPT: "0"
   WRT_CONFIG: ${{inputs.WRT_CONFIG}}
   WRT_THEME: ${{inputs.WRT_THEME}}
   WRT_NAME: ${{inputs.WRT_NAME}}
@@ -185,7 +182,6 @@ jobs:
 
       - name: Clone Code
         id: clone-code
-        timeout-minutes: 20
         run: |
           git clone --depth=1 --single-branch --branch $WRT_BRANCH $WRT_REPO ./wrt/
 
@@ -230,7 +226,6 @@ jobs:
           restore-keys: wrt-dl-${{env.WRT_CACHE_TARGET}}-
 
       - name: Prepare Restored Build Cache
-        timeout-minutes: 15
         if: ${{ !inputs.WRT_TEST && steps.cache-restore.outputs.cache-matched-key != '' }}
         run: |
           find "./wrt/staging_dir" -type d -name "stamp" -not -path "*target*" | while read -r DIR; do
@@ -267,7 +262,6 @@ jobs:
           timeout --signal=KILL 900 ./scripts/feeds install -a
 
       - name: Custom Packages
-        timeout-minutes: 30
         run: |
           cd ./wrt/
 
@@ -515,28 +509,16 @@ jobs:
           SHORT=$(find dl/ -type f -size -1024c 2>/dev/null | wc -l)
           echo "download 完成，dl/ $(du -sh dl 2>/dev/null | cut -f1)，可疑残包 ${SHORT} 个"
 
-      # 串行回退要留着（并行失败常常是 OOM，串行能过），但它会把日志刷成几万行、
-      # 而且一跑就是几个小时，看起来就像卡死。所以显式打一条横幅，并给步骤一个
-      # 硬上限，避免真的跑满 6 小时的 job 上限。
       - name: Compile Firmware
         if: ${{ !inputs.WRT_TEST }}
-        timeout-minutes: 300
         run: |
           cd ./wrt/
 
           mkdir -p $GITHUB_WORKSPACE/build-reports
-          if ! make -j$(nproc) BUILD_TIME_LOG="$GITHUB_WORKSPACE/build-reports/parallel.tsv"; then
-            echo ""
-            echo "=============================================================="
-            echo " 并行编译失败，改为单线程 V=s 重试（这不是卡死，会重新编一遍）"
-            echo " 如果失败原因是某个包的编译错误，这一步还会失败一次，属正常"
-            echo "=============================================================="
-            echo ""
+          make -j$(nproc) BUILD_TIME_LOG="$GITHUB_WORKSPACE/build-reports/parallel.tsv" || \
             make -j1 V=s BUILD_TIME_LOG="$GITHUB_WORKSPACE/build-reports/serial.tsv"
-          fi
 
       - name: Collect Build Reports
-        timeout-minutes: 15
         if: ${{ !inputs.WRT_TEST && always() }}
         continue-on-error: true
         run: |
@@ -545,7 +527,6 @@ jobs:
           $GITHUB_WORKSPACE/.github/scripts/collect-build-reports.sh
 
       - name: Upload Build Reports
-        timeout-minutes: 15
         if: ${{ !inputs.WRT_TEST && always() }}
         continue-on-error: true
         uses: actions/upload-artifact@v7
@@ -578,7 +559,6 @@ jobs:
             ./wrt/staging_dir/tool*
 
       - name: Machine Information
-        timeout-minutes: 10
         run: |
           cd ./wrt/
 
@@ -591,7 +571,6 @@ jobs:
           echo "======================="
 
       - name: Package Firmware
-        timeout-minutes: 40
         run: |
           cd ./wrt/ && mkdir ./upload/
 
@@ -624,7 +603,6 @@ jobs:
       # 不过要标记成 pre-release：① GitHub 的 Latest 徽标只给正式固件；
       # ② Auto-Clean 按 pre-release 与否分开计数，TEST 版本不会挤掉固件名额。
       - name: Release Firmware
-        timeout-minutes: 20
         uses: softprops/action-gh-release@master
         with:
           tag_name: ${{env.WRT_CONFIG}}-${{env.WRT_INFO}}-${{env.WRT_BRANCH}}-${{env.WRT_DATE}}
