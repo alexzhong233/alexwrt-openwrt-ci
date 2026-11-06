@@ -399,12 +399,28 @@ jobs:
 
           $GITHUB_WORKSPACE/.github/scripts/prepare-rust.sh
 
+      # 单个源码包下载失败不该拖死整条流水线。
+      # make download 只要有一个包的 URL 失效（上游删 tag、GitHub 限流、镜像
+      # 抽风）就返回非 0，整步报错，前面十几分钟白跑；而 dl/ 里小于 1KB 的
+      # 残包还会让 buildroot 以为已下载而跳过，到编译阶段才炸。
       - name: Download Packages
         if: ${{ !inputs.WRT_TEST }}
+        timeout-minutes: 90
         run: |
           cd ./wrt/
 
-          make download -j$(nproc)
+          find dl/ -type f -size -1024c -print -delete 2>/dev/null || true
+
+          if ! make download -j$(nproc); then
+            echo "::warning::并行下载存在失败项，10 秒后串行重试一次"
+            sleep 10
+            make download -j1 V=s || true
+          fi
+
+          # 编译阶段 buildroot 会按需重下缺失源码，真缺了会在编该包时报更具体的错，
+          # 这里只汇总一下还剩多少残包，方便和编译日志对照。
+          SHORT=$(find dl/ -type f -size -1024c 2>/dev/null | wc -l)
+          echo "download 完成，dl/ 内可疑残包 ${SHORT} 个"
 
       - name: Compile Firmware
         if: ${{ !inputs.WRT_TEST }}
