@@ -61,7 +61,7 @@
 | WiFi 名 | 按传参 | OpenWRT | `OpenWRT-2.4G` / `OpenWRT-5G`（静态文件写死） | **niubiAlex / niubiAlexGaming** |
 | WiFi 密码 | 按传参 | 1234567890 | 1234567890 | **88888888** |
 | WiFi 设置方式 | sed 改 `mac80211.uc` | 同左 | **整份 `/etc/config/wireless` 覆盖** | **`uci-defaults/99-niubialex-wireless` 首次启动生成** |
-| 软件源 | 上游默认 | 上游默认 | **换成 NJU 镜像 + iStore 源**（`files/etc/apk/repositories.d/distfeeds.list`） | 上游默认（曾跟 ax6600.emmc 改成 NJU，2026-11-06 已改回） |
+| 软件源 | 上游默认 | 上游默认 | **换成 NJU 镜像 + iStore 源**（`files/etc/apk/repositories.d/distfeeds.list`） | 上游默认 + NJU 追加（`customfeeds.list`） |
 
 WiFi 这一行的实现差异值得注意：ax6600.emmc 是"静态覆盖"，好处是绝对可控，坏处是上游改了无线默认值你就跟不上了；你用的是"首次启动脚本"，好处是兼容上游结构变化，坏处是脚本匹配逻辑依赖 `wifi-device` 的路径（比如 `*pci*` 判定）。
 
@@ -114,7 +114,7 @@ WiFi 这一行的实现差异值得注意：ax6600.emmc 是"静态覆盖"，好�
 ## 4. 两个可选优化（均已落地）
 
 1. **[已完成] 固件文件名带 `-none-`**。`WRT-CORE` 用配置名末尾的 `WIFI-YES`/`WIFI-NO` 决定文件名里的无线标识，原来的 `IPQ60XX-NIUBIALEX` 不匹配，于是 `WRT_WIFI=none`。现已把配置改名为 `IPQ60XX-NIUBIALEX-WIFI-YES`，固件文件名会变成 `...-jdcloud_re-cs-02-squashfs-sysupgrade-VIKINGYFY-owrt-WIFI-YES-<日期>.bin`。
-2. **[已撤销] 软件源换成国内镜像**。曾参考 ax6600.emmc 新增 `Files/RE-CS-02/etc/apk/repositories.d/distfeeds.list` 指向南京大学镜像（NJU）+ iStore。2026-11-06 按要求改回上游默认：该文件已删除，`distfeeds.list` 恢复由 base-files 按 `feeds.conf.default` 自动生成；要换源请写 `/etc/apk/repositories.d/customfeeds.list`。
+2. **[已调整] 国内镜像源**。曾参考 ax6600.emmc 用 `Files/RE-CS-02/etc/apk/repositories.d/distfeeds.list` 整份覆盖官方源（NJU + iStore）。2026-11-06 改成官方推荐做法：`distfeeds.list` 交回 base-files 自动生成（官方源），NJU 镜像写在 `customfeeds.list` 里**追加**，两份并存；iStore 的源由 `luci-app-store` 自带的 `compat.list` 提供，不再重复。
 
 ## 5. 工作流精简
 

@@ -1,0 +1,23 @@
+# 自定义软件包源（南京大学镜像）。
+#
+# 这里只追加，不覆盖 /etc/apk/repositories.d/distfeeds.list：
+# distfeeds.list 由 base-files 在编译时按 feeds.conf.default 生成，指向
+# downloads.immortalwrt.org（官方源），升级固件后会被重新生成；本文件是
+# 官方指定的自定义位置，sysupgrade 后会保留。
+#
+# NJU 镜像同步的是同一个 snapshots 树，包版本与官方源一致，两份源不会打架；
+# 国内网络下实际下载走这里会快很多。如果哪天镜像滞后导致版本对不上，删掉
+# 对应几行即可。
+
+# 目标平台软件包（kmod / 平台专属包）
+https://mirror.nju.edu.cn/immortalwrt/snapshots/targets/qualcommax/ipq60xx/packages/packages.adb
+# 基础包
+https://mirror.nju.edu.cn/immortalwrt/snapshots/packages/aarch64_cortex-a53/base/packages.adb
+# LuCI 界面
+https://mirror.nju.edu.cn/immortalwrt/snapshots/packages/aarch64_cortex-a53/luci/packages.adb
+# 常规软件包
+https://mirror.nju.edu.cn/immortalwrt/snapshots/packages/aarch64_cortex-a53/packages/packages.adb
+# 路由类（OpenClash、PassWall 等）
+https://mirror.nju.edu.cn/immortalwrt/snapshots/packages/aarch64_cortex-a53/routing/packages.adb
+# 电话类
+https://mirror.nju.edu.cn/immortalwrt/snapshots/packages/aarch64_cortex-a53/telephony/packages.adb
