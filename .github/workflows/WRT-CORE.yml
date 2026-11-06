@@ -404,18 +404,9 @@ jobs:
                 sort | xargs -r sha256sum > SHA256SUMS )
           fi
 
-      # TEST 模式只生成配置、不编译固件，如果照样走 Release 就会在仓库里
-      # 留下一个只有 Config txt 的"假固件"版本，干扰版本管理和清理逻辑。
-      - name: Upload Config Only
-        if: ${{ inputs.WRT_TEST }}
-        uses: actions/upload-artifact@v7
-        with:
-          name: config-${{env.WRT_CONFIG}}-${{env.WRT_DATE}}
-          path: ./wrt/upload/
-          retention-days: 7
-
+      # TEST 模式只生成配置、不编译固件，但依然照常发 Release —— 这是刻意
+      # 保留的行为：只放一个 Config txt 的版本用来留档/对比配置，不要拦。
       - name: Release Firmware
-        if: ${{ !inputs.WRT_TEST }}
         uses: softprops/action-gh-release@master
         with:
           tag_name: ${{env.WRT_CONFIG}}-${{env.WRT_INFO}}-${{env.WRT_BRANCH}}-${{env.WRT_DATE}}
