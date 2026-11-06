@@ -474,25 +474,34 @@ jobs:
 
           find dl/ -type f -size -1024c -print -delete 2>/dev/null || true
 
+          # 心跳必须能被立刻停掉：之前写的是 `sleep 60` 死循环 + kill，bash 在
+          # 非交互模式下要等当前 sleep 结束才处理 TERM，脚本明明打印完最后一行，
+          # 步骤还要多挂一分钟，看起来就像"下载完了却不往下走"。
+          # 改成 5 秒一检查停止标记，最多 5 秒退出。
+          rm -f /tmp/dl-hb.stop
           (
-            while :; do
-              sleep 60
-              echo "==> [$(date -u +%H:%M:%S)] dl/ $(du -sh dl 2>/dev/null | cut -f1)，文件 $(find dl -type f 2>/dev/null | wc -l) 个"
+            i=0
+            while [ ! -f /tmp/dl-hb.stop ]; do
+              sleep 5
+              i=$((i + 1))
+              if [ $((i % 12)) -eq 0 ]; then
+                echo "==> [$(date -u +%H:%M:%S)] dl/ $(du -sh dl 2>/dev/null | cut -f1)，文件 $(find dl -type f 2>/dev/null | wc -l) 个"
+              fi
             done
           ) &
           HB=$!
-          trap 'kill $HB 2>/dev/null' EXIT
+          stop_hb() { touch /tmp/dl-hb.stop; wait "$HB" 2>/dev/null || true; }
+          trap stop_hb EXIT
 
           # 25 分钟还没下完就人为打断，转成串行 V=s —— 那样每个 URL 都会打出来，
           # 卡在哪个包上一目了然。已经下好的文件会被跳过，不重复下载。
           if ! timeout -k 10 1500 make download -j$(nproc); then
             echo "::warning::并行下载失败或超过 25 分钟，改串行逐包定位"
-            kill $HB 2>/dev/null
-            sleep 5
+            stop_hb
             timeout -k 10 1800 make download -j1 V=s || true
           fi
 
-          kill $HB 2>/dev/null
+          stop_hb
           trap - EXIT
 
           # 编译阶段 buildroot 会按需重下缺失源码，真缺了会在编该包时报更具体的错，
