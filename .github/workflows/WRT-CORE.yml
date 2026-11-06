@@ -458,56 +458,18 @@ jobs:
 
           $GITHUB_WORKSPACE/.github/scripts/prepare-rust.sh
 
-      # 单个源码包下载失败不该拖死整条流水线。
-      # make download 只要有一个包的 URL 失效（上游删 tag、GitHub 限流、镜像
-      # 抽风）就返回非 0，整步报错，前面十几分钟白跑；而 dl/ 里小于 1KB 的
-      # 残包还会让 buildroot 以为已下载而跳过，到编译阶段才炸。
-      #
-      # make download 本身不打印任何进度，几百 MB~几 GB 的源码拉下来这段时间
-      # 日志完全静默，看起来和卡死没有区别。所以这里挂一个后台心跳，每分钟把
-      # dl/ 的体积打出来；体积在涨就是在下，不涨才是真卡。
       - name: Download Packages
         if: ${{ !inputs.WRT_TEST }}
         timeout-minutes: 90
         run: |
           cd ./wrt/
 
-          find dl/ -type f -size -1024c -print -delete 2>/dev/null || true
-
-          # 心跳必须能被立刻停掉：之前写的是 `sleep 60` 死循环 + kill，bash 在
-          # 非交互模式下要等当前 sleep 结束才处理 TERM，脚本明明打印完最后一行，
-          # 步骤还要多挂一分钟，看起来就像"下载完了却不往下走"。
-          # 改成 5 秒一检查停止标记，最多 5 秒退出。
-          rm -f /tmp/dl-hb.stop
-          (
-            i=0
-            while [ ! -f /tmp/dl-hb.stop ]; do
-              sleep 5
-              i=$((i + 1))
-              if [ $((i % 12)) -eq 0 ]; then
-                echo "==> [$(date -u +%H:%M:%S)] dl/ $(du -sh dl 2>/dev/null | cut -f1)，文件 $(find dl -type f 2>/dev/null | wc -l) 个"
-              fi
-            done
-          ) &
-          HB=$!
-          stop_hb() { touch /tmp/dl-hb.stop; wait "$HB" 2>/dev/null || true; }
-          trap stop_hb EXIT
-
-          # 25 分钟还没下完就人为打断，转成串行 V=s —— 那样每个 URL 都会打出来，
-          # 卡在哪个包上一目了然。已经下好的文件会被跳过，不重复下载。
           if ! timeout -k 10 1500 make download -j$(nproc); then
             echo "::warning::并行下载失败或超过 25 分钟，改串行逐包定位"
-            stop_hb
             timeout -k 10 1800 make download -j1 V=s || true
           fi
 
-          stop_hb
-          trap - EXIT
-
-          # 编译阶段 buildroot 会按需重下缺失源码，真缺了会在编该包时报更具体的错，
-          # 这里只汇总一下还剩多少残包，方便和编译日志对照。
-          SHORT=$(find dl/ -type f -size -1024c 2>/dev/null | wc -l)
-          echo "download 完成，dl/ $(du -sh dl 2>/dev/null | cut -f1)，可疑残包 ${SHORT} 个"
+          echo "download 完成，dl/ $(du -sh dl 2>/dev/null | cut -f1)"
 
       - name: Compile Firmware
         if: ${{ !inputs.WRT_TEST }}
