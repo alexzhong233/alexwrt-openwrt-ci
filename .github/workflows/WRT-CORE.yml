@@ -226,6 +226,90 @@ jobs:
 
           make defconfig -j$(nproc) && make clean -j$(nproc)
 
+      # make defconfig 遇到源码缺失、依赖不满足或包已改名的 CONFIG_PACKAGE
+      # 不会报错，只会把那一行静默删掉，最终产出一个"构建成功"但少插件的固件。
+      # 这里把配置里要求 =y 的包和实际 .config 逐条比对。
+      #
+      # 分两级：Scripts/Packages.sh 自己 clone 的包一旦整行消失，说明克隆或提取
+      # 失败，直接中断构建；其余（kmod、平台内核相关）只提示，因为它们在当前
+      # 平台/内核配置下本来就不存在。确属正常的包可写进 Config/verify-ignore.txt。
+      - name: Verify Package Selection
+        run: |
+          cd ./wrt/
+
+          CONFIG_FILES="$GITHUB_WORKSPACE/Config/$WRT_CONFIG.txt"
+          if [[ "${WRT_CONFIG,,}" != *"test"* ]]; then
+            CONFIG_FILES="$CONFIG_FILES $GITHUB_WORKSPACE/Config/GENERAL.txt"
+          fi
+          if [ -n "$WRT_EXTRA_CONFIG" ]; then
+            CONFIG_FILES="$CONFIG_FILES $GITHUB_WORKSPACE/Config/$WRT_EXTRA_CONFIG"
+          fi
+
+          # 同一包可能先后出现 =y 和 =m（OVERRIDES 最后写入并生效），
+          # 按出现顺序覆盖，只保留最终为 y 的。
+          REQUESTED=$(cat $CONFIG_FILES |
+            grep -oE '^CONFIG_PACKAGE_[^=]+=[ym]' |
+            sed 's/^CONFIG_PACKAGE_//' |
+            awk -F= '{v[$1]=$2} END {for (k in v) if (v[k]=="y") print k}' | sort)
+          TOTAL=$(printf '%s\n' "$REQUESTED" | grep -c . || true)
+
+          SELF_PKGS=$(grep -oE '^UPDATE_(PACKAGE|TOPLEVEL_PACKAGE|NESTED_PACKAGE) "[^"]+"' \
+            "$GITHUB_WORKSPACE/Scripts/Packages.sh" |
+            sed -E 's/^[A-Z_]+ "([^"]+)"$/\1/')
+
+          IGNORE_FILE="$GITHUB_WORKSPACE/Config/verify-ignore.txt"
+
+          FATAL=""; WARN=""
+          for PKG in $REQUESTED; do
+            if grep -qxF "CONFIG_PACKAGE_$PKG=y" .config; then
+              continue
+            fi
+
+            if [ -f "$IGNORE_FILE" ] && grep -qxF "$PKG" "$IGNORE_FILE"; then
+              continue
+            fi
+
+            if grep -qxF "# CONFIG_PACKAGE_$PKG is not set" .config; then
+              WARN="$WARN $PKG(依赖不满足)"
+              continue
+            fi
+            if grep -qxF "CONFIG_PACKAGE_$PKG=m" .config; then
+              WARN="$WARN $PKG(被降级为m)"
+              continue
+            fi
+
+            # 整行都不存在 = 包源码没进树。只有自建包才判定为致命。
+            OWNED=0
+            for S in $SELF_PKGS; do
+              case "$PKG" in
+                *"$S"*) OWNED=1; break ;;
+              esac
+            done
+            if [ "$OWNED" -eq 1 ]; then
+              FATAL="$FATAL $PKG"
+            else
+              WARN="$WARN $PKG(平台不适用)"
+            fi
+          done
+
+          if [ -n "$WARN" ]; then
+            echo "::warning::以下包未按配置进入 .config（不阻断构建）："
+            for ITEM in $WARN; do echo "  warn: $ITEM"; done
+          fi
+
+          if [ -n "$FATAL" ]; then
+            echo "::error::以下自建包整行未出现在 .config，说明 Packages.sh 的克隆或提取没成功"
+            for PKG in $FATAL; do echo "  dropped: $PKG"; done
+            echo ""
+            echo "排查方向："
+            echo "  1. 上游仓库是否改名/删分支/变更目录结构（看 Custom Packages 步骤日志里的 ::error::）"
+            echo "  2. 包名是否和 Makefile 里的 define Package 不一致"
+            echo "  3. 确认属于该平台本来就没有的包，写进 Config/verify-ignore.txt 后重跑"
+            exit 1
+          fi
+
+          echo "校验完成：配置中 $TOTAL 个 =y 软件包全部按预期进入 .config。"
+
       - name: Prepare Rust Toolchain
         if: ${{ !inputs.WRT_TEST }}
         run: |

@@ -21,6 +21,17 @@
 
 配置名结尾的 `-WIFI-YES` 不能省。`WRT-CORE` 从配置名末尾取 WIFI 标记写进固件文件名，不带后缀会变成 `...-none-<日期>.bin`。
 
+### 编译期断言
+
+`Scripts/Packages.sh` 里每次 `git clone` 都走统一的 `clone_repo`，任何一个仓库拉不到就直接中断构建，不再带着缺失的包往下编。`UPDATE_PACKAGE` 的 `pkg` 提取模式还会检查提取结果是否为空。
+
+`WRT-CORE` 在 `make defconfig` 之后有一步 `Verify Package Selection`，把配置里要求 `=y` 的包和最终 `.config` 逐条比对：
+
+- **自建包整行消失**（`Scripts/Packages.sh` 里 clone 的那些）→ 直接失败，因为这说明克隆或目录提取没成功。
+- **依赖不满足 / 被降级成 `=m` / 平台本来就没有**（例如 `kmod-*`）→ 只打 `::warning::`，不阻断构建，日志里能看到完整清单。
+
+确属正常、不想每次告警的包，写进 `Config/verify-ignore.txt`（一行一个包名，文件不存在也没关系）。
+
 ## Wi-Fi 默认值
 
 | 频段 | SSID | 信道 | htmode |

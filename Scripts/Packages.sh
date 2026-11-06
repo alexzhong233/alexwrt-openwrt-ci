@@ -2,6 +2,28 @@
 # SPDX-License-Identifier: MIT
 # Copyright (C) 2026 VIKINGYFY
 
+# 统一的仓库克隆入口。
+# 任何一次 clone 失败都直接中止构建：以前失败后会继续往下跑，make defconfig
+# 静默丢弃找不到源码的包，最后产出一个"构建成功"但少插件的固件。
+# 分支传空字符串时不加 --single-branch，供 sparse checkout 之类场景使用。
+clone_repo() {
+	local REPO=$1
+	local BRANCH=$2
+	local DEST=$3
+	shift 3
+
+	local -a ARGS=(--depth=1)
+	if [ -n "$BRANCH" ]; then
+		ARGS+=(--single-branch --branch "$BRANCH")
+	fi
+
+	if ! git clone "${ARGS[@]}" "$@" "https://github.com/$REPO.git" "$DEST"; then
+		echo "::error::Failed to clone $REPO (branch: ${BRANCH:-default}) into $DEST" >&2
+		rm -rf "$DEST"
+		exit 1
+	fi
+}
+
 #安装和更新软件包
 UPDATE_PACKAGE() {
 	local PKG_NAME=$1
@@ -31,13 +53,26 @@ UPDATE_PACKAGE() {
 		fi
 	done
 
-	# 克隆 GitHub 仓库
-	git clone --depth=1 --single-branch --branch $PKG_BRANCH "https://github.com/$PKG_REPO.git" $REPO_PATH
-
 	# 处理克隆的仓库
 	if [[ "$PKG_SPECIAL" == "pkg" ]]; then
-		find $REPO_PATH/*/ -maxdepth 3 -type d -iname "*$PKG_NAME*" -prune -exec cp -rf {} ./package \;
-		rm -rf $REPO_PATH
+		# 这类仓库根目录不是包本身，只提取匹配的子目录。
+		# 必须克隆到临时目录：当仓库名与包名相同时（例如
+		# xiaodoudou/luci-app-uugamebooster），直接克隆到 package/<仓库名>
+		# 会让 cp 把目录拷到自己内部，随后 rm -rf 连提取出来的包一起删掉，
+		# 最终 make defconfig 静默丢弃该包，固件里就没有它。
+		local PKG_TMP EXTRACTED
+		PKG_TMP=$(mktemp -d)
+		clone_repo "$PKG_REPO" "$PKG_BRANCH" "$PKG_TMP/$REPO_NAME"
+		find "$PKG_TMP/$REPO_NAME"/*/ -maxdepth 3 -type d -iname "*$PKG_NAME*" -prune -exec cp -rf {} ./package \;
+		rm -rf "$PKG_TMP"
+
+		EXTRACTED=$(find ./package -maxdepth 3 -type d -iname "*$PKG_NAME*" 2>/dev/null | head -1)
+		if [ -z "$EXTRACTED" ]; then
+			echo "::error::pkg extraction produced nothing for $PKG_NAME from $PKG_REPO (目录结构可能已变更)" >&2
+			exit 1
+		fi
+	else
+		clone_repo "$PKG_REPO" "$PKG_BRANCH" "$REPO_PATH"
 	fi
 }
 
@@ -55,13 +90,12 @@ UPDATE_TOPLEVEL_PACKAGE() {
 		find "$ROOT" -maxdepth 3 -type d -iname "*$PKG_DIR*" -exec rm -rf {} + 2>/dev/null || true
 	done
 	TMP_DIR=$(mktemp -d)
-	git clone --depth=1 --single-branch --branch "$PKG_BRANCH" \
-		"https://github.com/$PKG_REPO.git" "$TMP_DIR/src"
+	clone_repo "$PKG_REPO" "$PKG_BRANCH" "$TMP_DIR/src"
 
 	if [ ! -f "$TMP_DIR/src/Makefile" ]; then
-		echo "Top-level Makefile missing in $PKG_REPO" >&2
+		echo "::error::Top-level Makefile missing in $PKG_REPO" >&2
 		rm -rf "$TMP_DIR"
-		return 1
+		exit 1
 	fi
 
 	rm -rf "./package/$PKG_DIR"
@@ -85,13 +119,12 @@ UPDATE_NESTED_PACKAGE() {
 		find "$ROOT" -maxdepth 3 -type d -iname "*$PKG_DIR*" -exec rm -rf {} + 2>/dev/null || true
 	done
 	TMP_DIR=$(mktemp -d)
-	git clone --depth=1 --single-branch --branch "$PKG_BRANCH" \
-		"https://github.com/$PKG_REPO.git" "$TMP_DIR/src"
+	clone_repo "$PKG_REPO" "$PKG_BRANCH" "$TMP_DIR/src"
 
 	if [ ! -f "$TMP_DIR/src/$PKG_SOURCE_DIR/Makefile" ]; then
-		echo "Nested package Makefile missing in $PKG_REPO/$PKG_SOURCE_DIR" >&2
+		echo "::error::Nested package Makefile missing in $PKG_REPO/$PKG_SOURCE_DIR" >&2
 		rm -rf "$TMP_DIR"
-		return 1
+		exit 1
 	fi
 
 	rm -rf "./package/$PKG_DIR"
@@ -186,18 +219,24 @@ UPDATE_NESTED_PACKAGE "luci-app-netbird" "looong-cat/luci-app-netbird" "main" "l
 # when available; otherwise fetch only net/netbird into the build tree.
 if ! find ./feeds/packages ./package -type d -path '*/netbird' 2>/dev/null | grep -q .; then
 	NETBIRD_TMP=$(mktemp -d)
-	git clone --depth=1 --filter=blob:none --sparse https://github.com/openwrt/packages.git "$NETBIRD_TMP/openwrt-packages"
-	git -C "$NETBIRD_TMP/openwrt-packages" sparse-checkout set net/netbird
+	clone_repo "openwrt/packages" "" "$NETBIRD_TMP/openwrt-packages" --filter=blob:none --sparse
+	if ! git -C "$NETBIRD_TMP/openwrt-packages" sparse-checkout set net/netbird; then
+		echo "::error::Failed to sparse-checkout net/netbird from openwrt/packages" >&2
+		exit 1
+	fi
 	mkdir -p ./package/netbird
 	cp -a "$NETBIRD_TMP/openwrt-packages/net/netbird/." ./package/netbird/
+	if [ ! -f ./package/netbird/Makefile ]; then
+		echo "::error::netbird Makefile missing after sparse checkout" >&2
+		exit 1
+	fi
 fi
 
 # OpenAppFilter is a three-package stack. Copy the package directories
 # explicitly because the upstream repository has no top-level Makefile.
 if [[ "${WRT_APPFILTER,,}" == "true" ]]; then
 	OAF_TMP=$(mktemp -d)
-	git clone --depth=1 --single-branch --branch master \
-		"https://github.com/destan19/OpenAppFilter.git" "$OAF_TMP/OpenAppFilter"
+	clone_repo "destan19/OpenAppFilter" "master" "$OAF_TMP/OpenAppFilter"
 	for OAF_PACKAGE in open-app-filter oaf luci-app-oaf; do
 		if [ ! -d "$OAF_TMP/OpenAppFilter/$OAF_PACKAGE" ]; then
 			echo "OpenAppFilter package directory missing: $OAF_PACKAGE" >&2
@@ -218,8 +257,7 @@ else
 	echo "VIKING NSS base packages are not present; luci-app-nss will remain monitor-only."
 fi
 NSS_TMP=$(mktemp -d)
-git clone --depth=1 --single-branch --branch master \
-	"https://github.com/yduke/luci-app-nss.git" "$NSS_TMP/luci-app-nss"
+clone_repo "yduke/luci-app-nss" "master" "$NSS_TMP/luci-app-nss"
 rm -rf ./package/luci-app-nss
 mkdir -p ./package/luci-app-nss
 cp -a "$NSS_TMP/luci-app-nss/Makefile" ./package/luci-app-nss/
@@ -240,6 +278,16 @@ UPDATE_PACKAGE "quickfile" "sbwml/luci-app-quickfile" "main"
 
 # 当前路由器使用的 SysTools 来自 LinkEase 应用扩展仓库。
 UPDATE_PACKAGE "systools" "linkease/openwrt-app-actions" "main" "pkg"
+
+# luci.mk 只认 LUCI_LANG.zh_Hans，再经 LUCI_LC_ALIAS.zh_Hans 映射成 -zh-cn
+# 的包名。openwrt-app-actions 里这个包还用旧式 po/zh-cn 目录名，对不上就会
+# 跳过 i18n 包，配置里的 CONFIG_PACKAGE_luci-i18n-systools-zh-cn 被 make
+# defconfig 静默丢弃。改名后中文翻译才真的进固件。
+SYSTOOLS_PO="./package/luci-app-systools/po"
+if [ -d "$SYSTOOLS_PO/zh-cn" ] && [ ! -d "$SYSTOOLS_PO/zh_Hans" ]; then
+	mv "$SYSTOOLS_PO/zh-cn" "$SYSTOOLS_PO/zh_Hans"
+	echo "Renamed systools po/zh-cn -> po/zh_Hans so luci.mk emits the i18n package"
+fi
 
 # 1Panel LuCI 管理页。当前公开包位于 openwrt-app-actions 的嵌套目录，
 # 直接提取 luci-app-istorepanel；找不到目录时让 CI 明确失败，避免生成
