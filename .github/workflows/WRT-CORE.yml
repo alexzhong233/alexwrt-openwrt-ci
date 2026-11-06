@@ -205,6 +205,7 @@ jobs:
           $GITHUB_WORKSPACE/Scripts/Handles.sh
           $GITHUB_WORKSPACE/.github/scripts/prepare-i2c-tools.sh
           $GITHUB_WORKSPACE/Scripts/prepare-uu-view-preload.sh
+          $GITHUB_WORKSPACE/Scripts/prepare-workbuddy2api.sh
 
       - name: Install Custom Files
         if: ${{ env.WRT_FILES != '' }}
