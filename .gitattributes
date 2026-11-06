@@ -20,3 +20,8 @@ Files/**/etc/apk/repositories.d/* text eol=lf
 Files/**/etc/crontabs/* text eol=lf
 Files/**/usr/bin/* text eol=lf
 Files/**/usr/sbin/* text eol=lf
+
+# LuCI 应用与 Scripts 下没有扩展名的脚本，同样是交给路由器直接执行的：
+# Lua 模板和 uci-defaults 带 CRLF 会让 shebang 与 rc.common 解析失败。
+LuCI/** text eol=lf
+Scripts/** text eol=lf
