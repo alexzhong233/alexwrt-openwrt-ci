@@ -4,9 +4,10 @@
 name: Auto-Clean
 
 on:
-  # 每天北京时间 05:21（比 06:00 的定时编译早 39 分钟）清理一次。
-  # 保留最近 3 个 Release（含挂在上面的固件）和最近 30 天的构建记录，
-  # 这样即使某天编译失败，手上仍然有可回滚的固件。
+  # 每天北京时间 05:21（比 06:17 的定时编译早）清理一次。
+  # 正式固件保留最近 3 个，TEST 生成的「只有 Config txt」的 pre-release 保留
+  # 最近 3 个，构建记录保留最近 30 天。两者分开计数 —— 连续点几次 TEST 也不会
+  # 把真正能刷机的固件挤掉。
   schedule:
     - cron: 21 21 * * *
   workflow_dispatch:
@@ -19,12 +20,26 @@ jobs:
   auto_clean:
     runs-on: ubuntu-latest
     steps:
-      - name: Delete old Releases and Workflows
+      # TEST 模式发出来的版本带 pre-release 标记，只留最近 3 个用来对比配置。
+      # 单个只有几百 KB，删早了反而没得比。
+      - name: Delete old TEST (pre-release) builds
         uses: ophub/delete-releases-workflows@main
         with:
           gh_token: ${{secrets.GITHUB_TOKEN}}
           delete_releases: true
-          # 保留最近 3 个 Release（连同固件文件）。
+          prerelease_option: true
+          releases_keep_latest: 3
+          delete_tags: true
+          # 构建记录交给下一步统一处理，这里不重复跑。
+          delete_workflows: false
+
+      # 正式固件（含 factory / sysupgrade 两个镜像）保留最近 3 个。
+      - name: Delete old releases and workflow runs
+        uses: ophub/delete-releases-workflows@main
+        with:
+          gh_token: ${{secrets.GITHUB_TOKEN}}
+          delete_releases: true
+          prerelease_option: false
           releases_keep_latest: 3
           # 被删掉的 Release 对应的 tag 一起删，避免 tag 越积越多。
           delete_tags: true

@@ -406,10 +406,13 @@ jobs:
 
       # TEST 模式只生成配置、不编译固件，但依然照常发 Release —— 这是刻意
       # 保留的行为：只放一个 Config txt 的版本用来留档/对比配置，不要拦。
+      # 不过要标记成 pre-release：① GitHub 的 Latest 徽标只给正式固件；
+      # ② Auto-Clean 按 pre-release 与否分开计数，TEST 版本不会挤掉固件名额。
       - name: Release Firmware
         uses: softprops/action-gh-release@master
         with:
           tag_name: ${{env.WRT_CONFIG}}-${{env.WRT_INFO}}-${{env.WRT_BRANCH}}-${{env.WRT_DATE}}
+          prerelease: ${{inputs.WRT_TEST}}
           # 用 * 而不是 *.*：SHA256SUMS 这类没有扩展名的文件也要一起发布。
           files: ./wrt/upload/*
           body: |
