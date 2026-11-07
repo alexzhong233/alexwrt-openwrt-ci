@@ -122,7 +122,11 @@ jobs:
           WRT_WIFI=$(grep -oE 'WIFI-(YES|NO)$' <<< "${WRT_CONFIG^^}" || true); WRT_WIFI=${WRT_WIFI:-none}
 
           {
-            echo "WRT_INFO=${WRT_SOURCE%%/*}"
+            # 固件名里的来源标识。以前取 WRT_SOURCE 的 owner（上游作者名），
+            # 出来是 ...-VIKINGYFY-owrt-...，跟构建者没关系。改用本仓库的
+            # owner，产物就带自己的名字了。注意这只影响命名，缓存 key 用的是
+            # 下面的 WRT_CACHE_PREFIX，仍然是上游仓库+分支+机型，互不干扰。
+            echo "WRT_INFO=${GITHUB_REPOSITORY_OWNER}"
             echo "WRT_MARK=${GITHUB_REPOSITORY%%/*}"
             echo "WRT_DATE=$(TZ=UTC-8 date +"%y.%m.%d-%H.%M.%S")"
             echo "WRT_CACHE_PREFIX=$WRT_CACHE_PREFIX"

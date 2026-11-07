@@ -34,7 +34,7 @@ jobs:
       WRT_THEME: aurora
       WRT_NAME: niubiAlex
       WRT_SSID: niubiAlex
-      WRT_WORD: 88888888
+      WRT_WORD: "12345678"
       WRT_IP: 192.168.88.1
       WRT_PW: 不设置，首次登录后自行设置
       WRT_REPO: https://github.com/VIKINGYFY/immortalwrt.git

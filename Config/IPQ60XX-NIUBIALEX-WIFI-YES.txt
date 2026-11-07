@@ -31,7 +31,16 @@ CONFIG_PACKAGE_dockerd=y
 CONFIG_PACKAGE_docker-compose=y
 CONFIG_PACKAGE_luci-app-passwall=y
 CONFIG_PACKAGE_luci-app-openclash=y
+# 设置向导与 vantage（对照 577090447/ax6600.emmc 的 GENERAL.txt）
+CONFIG_PACKAGE_luci-app-netwizard=y
+CONFIG_PACKAGE_luci-i18n-netwizard-zh-cn=y
+CONFIG_PACKAGE_luci-app-vantage=y
+CONFIG_PACKAGE_luci-i18n-vantage-zh-cn=y
 CONFIG_PACKAGE_luci-app-athena-led=y
+# 只装 luci-app-athena-led 只有界面，屏幕控制的实际程序在 athena-led 包里。
+# 缺了它界面能开但控制无效（对照 577090447/ax6600.emmc 的配置）。
+CONFIG_PACKAGE_athena-led=y
+CONFIG_PACKAGE_luci-i18n-athena-led-zh-cn=y
 CONFIG_PACKAGE_luci-app-harbor-file=y
 CONFIG_PACKAGE_openlist2=y
 CONFIG_PACKAGE_luci-app-openlist2=y

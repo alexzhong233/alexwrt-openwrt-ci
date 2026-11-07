@@ -64,23 +64,57 @@ pick_iface() {
 	echo "$fallback"
 }
 
-for section in $(uci show wireless 2>/dev/null | sed -n "s/^wireless\.\([^.=]*\)=wifi-device$/\1/p"); do
+# boot() 里的 /sbin/wifi config 跑在 kmodloader 之前（/etc/init.d/boot:49），
+# 那时 ath11k 还没加载，生成出来的 /etc/config/wireless 是空壳。这里等无线
+# 设备节点出现后再补一次，否则下面的循环拿到空列表，什么都没改，脚本却会被
+# uci_apply_defaults 当成执行成功而删除，永久失效。
+wait_radio() {
+	local i=0
+
+	while [ "$i" -lt 30 ]; do
+		[ -n "$(ls /sys/class/ieee80211 2>/dev/null)" ] && return 0
+		i=$((i + 1))
+		sleep 1
+	done
+
+	return 1
+}
+
+list_devices() {
+	uci show wireless 2>/dev/null | sed -n "s/^wireless\.\([^.=]*\)=wifi-device$/\1/p"
+}
+
+SECTIONS=$(list_devices)
+
+if [ -z "$SECTIONS" ]; then
+	wait_radio
+	/sbin/wifi config 2>/dev/null || true
+	SECTIONS=$(list_devices)
+fi
+
+# 仍然是空：说明无线还没就绪。返回非 0，uci_apply_defaults 会保留本脚本，
+# 下次启动再试（它的约定是 ( . script ) 成功才删除）。
+[ -n "$SECTIONS" ] || exit 1
+
+for section in $SECTIONS; do
 	band=$(uci -q get "wireless.$section.band" || true)
 	path=$(uci -q get "wireless.$section.path" || true)
 
 	case "$band" in
 		2g)
-			ssid="@WRT_SSID@"
+			ssid="@WRT_SSID@-2.4G"
 			channel=5
 			htmode=HE40
 			;;
 		5g)
+			# 外挂卡是 4x4 HE160，跑低频段（5.2G）；内置 5G 是 2x2 HE80，
+			# 跑高频段（5.8G）。SSID 直接按这个对应关系命名。
 			if is_pcie_radio "$path"; then
-				ssid="@WRT_SSID@Gaming"
+				ssid="@WRT_SSID@-5.2G"
 				channel=36
 				htmode=HE160
 			else
-				ssid="@WRT_SSID@"
+				ssid="@WRT_SSID@-5.8G"
 				channel=161
 				htmode=HE80
 			fi
