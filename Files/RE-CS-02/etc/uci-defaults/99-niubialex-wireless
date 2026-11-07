@@ -14,6 +14,22 @@
 
 set -u
 
+# 只初始化一次，之后不再碰配置。
+#
+# uci_apply_defaults 的约定是「脚本返回 0 才删掉自己」，而下面「无线还没就绪」
+# 那条分支会 exit 1，脚本就被留下来等下次启动重试。重试一旦成功，就会把用户
+# 在 LuCI 里改过的 SSID 和密码原样覆盖回去——表现为「每次重启无线名和密码都
+# 变回默认」。所以成功改完后落一个标记，以后不管脚本还在不在，见到标记就
+# 直接退出（顺手把自己删掉），不再动 wireless 配置。
+#
+# 标记放在 /etc/config 下：sysupgrade 保留配置时会一起保留，符合「只初始化
+# 一次」的语义。想让它重新初始化，删掉这个文件即可。
+MARKER="${NIUBIALEX_WIFI_MARKER:-/etc/config/.niubialex-wireless}"
+if [ -e "$MARKER" ]; then
+	rm -f "$0"
+	exit 0
+fi
+
 WIFI_KEY="12345678"
 
 SSID_PREFIX=$(uci -q get system.@system[0].hostname 2>/dev/null || true)
@@ -146,5 +162,9 @@ for section in $SECTIONS; do
 done
 
 uci commit wireless
+
+# 落标记：以后即使本脚本因为重启时序问题被保留，也不会再覆盖用户改过的配置。
+touch "$MARKER" 2>/dev/null || true
+
 wifi reload 2>/dev/null || true
 exit 0
