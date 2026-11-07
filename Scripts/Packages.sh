@@ -268,11 +268,42 @@ if ! find ./feeds/packages ./package -type d -path '*/netbird' 2>/dev/null | gre
 	fi
 fi
 
-# OpenAppFilter is a three-package stack. Copy the package directories
-# explicitly because the upstream repository has no top-level Makefile.
+# OpenAppFilter is a three-package stack (appfilter / kmod-oaf / luci-app-oaf).
+# Copy the package directories explicitly because the upstream repository has no
+# top-level Makefile.
+#
+# Two things taken from 577090447/ax6600.emmc's UPDATE_PACKAGE:
+#
+# 1. Drop the feeds copies of the same packages first. The luci feed still ships
+#    the retired luci-app-appfilter (6.1.4), which targets the pre-7.0 daemon and
+#    pulls "+appfilter" along. A stale tree next to our packages is how a build
+#    ends up with a daemon registering the old "appfilter" ubus object while the
+#    UI calls "fwx": status fields stay blank and the online feature list cannot
+#    be refreshed. Removing it keeps a single source of truth.
+# 2. Refuse anything older than 7.0. The 7.0 rewrite is what renamed the ubus
+#    service to fwx (open-app-filter/src/fwx_ubus.c); a checkout without that
+#    file cannot satisfy luci-app-oaf and would silently ship a broken pair.
 if [[ "${WRT_APPFILTER,,}" == "true" ]]; then
+	for OAF_FEED in ./feeds/luci ./feeds/packages; do
+		[ -d "$OAF_FEED" ] || continue
+		while IFS= read -r OAF_STALE; do
+			[ -n "$OAF_STALE" ] || continue
+			echo "Dropping stale feed package: $OAF_STALE"
+			rm -rf "$OAF_STALE"
+		done < <(find "$OAF_FEED" -maxdepth 3 -type d \( -iname '*appfilter*' -o -iname '*oaf*' -o -iname '*open-app-filter*' \) 2>/dev/null)
+	done
+	# feeds install left symlinks behind; clear the ones whose target just went away.
+	find ./package/feeds -maxdepth 2 -xtype l -delete 2>/dev/null || true
+
 	OAF_TMP=$(mktemp -d)
 	clone_repo "destan19/OpenAppFilter" "master" "$OAF_TMP/OpenAppFilter"
+	if [ ! -f "$OAF_TMP/OpenAppFilter/open-app-filter/src/fwx_ubus.c" ]; then
+		echo "::error::OpenAppFilter checkout predates 7.0 (open-app-filter/src/fwx_ubus.c missing); refusing to build a daemon that cannot talk to luci-app-oaf" >&2
+		exit 1
+	fi
+	OAF_VERSION=$(sed -n 's/^PKG_VERSION:=//p' "$OAF_TMP/OpenAppFilter/open-app-filter/Makefile" | head -1)
+	OAF_LUCI_VERSION=$(sed -n 's/^PKG_VERSION:=//p' "$OAF_TMP/OpenAppFilter/luci-app-oaf/Makefile" | head -1)
+	echo "OpenAppFilter: daemon ${OAF_VERSION:-unknown}, luci ${OAF_LUCI_VERSION:-unknown} (ubus service fwx)"
 	for OAF_PACKAGE in open-app-filter oaf luci-app-oaf; do
 		if [ ! -d "$OAF_TMP/OpenAppFilter/$OAF_PACKAGE" ]; then
 			echo "OpenAppFilter package directory missing: $OAF_PACKAGE" >&2
