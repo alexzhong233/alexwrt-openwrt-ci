@@ -33,8 +33,8 @@ jobs:
       WRT_CONFIG: IPQ60XX-NIUBIALEX-WIFI-YES
       WRT_THEME: aurora
       WRT_NAME: alexWrt
-      WRT_SSID: niubiAlex
-      WRT_WORD: "88888888"
+      # 无线名和密码不再从工作流传入：首启脚本里固定成
+      # <主机名>-Jdcloud-2.4g / -5.2g / -5.8g，密码统一 12345678。
       WRT_IP: 192.168.88.1
       WRT_PW: 不设置，首次登录后自行设置
       # 上游用 VIKINGYFY/immortalwrt 的 owrt 分支。

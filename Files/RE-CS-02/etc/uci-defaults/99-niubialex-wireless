@@ -4,10 +4,20 @@
 # Runs once only: a successful /etc/uci-defaults script removes itself.
 # Existing settings are intentionally not touched after this script has run.
 #
-# @WRT_SSID@ / @WRT_WORD@ 是占位符，编译时由 Scripts/Settings.sh 用
-# NIUBIALEX.yml 里的 WRT_SSID / WRT_WORD 入参替换。直接改这里的字面量没有用。
+# 命名规则固定：<主机名>-Jdcloud-2.4g / -5.2g / -5.8g，密码统一 12345678。
+# 主机名取 system.@system[0].hostname（由 CI 的 WRT_NAME 写入 config_generate），
+# 所以 SSID 和登录主机名始终一致。@WRT_NAME@ 只是脚本早于 hostname 就位时的
+# 兜底，由 Scripts/Settings.sh 替换成同一个值。
+#
+# 不再从 CI 入参注入 SSID 和密码：那套占位符一旦替换漏掉一个，就会留下一片
+# 叫 "@WRT_SSID@" 的网络，而且密码留空的逻辑还会把加密方式改成 none。
 
 set -u
+
+WIFI_KEY="12345678"
+
+SSID_PREFIX=$(uci -q get system.@system[0].hostname 2>/dev/null || true)
+[ -n "$SSID_PREFIX" ] || SSID_PREFIX="@WRT_NAME@"
 
 # RE-CS-02 有三个 radio：内置 2.4G、内置 5G（2x2，最高 HE80），以及外挂的
 # 4x4 5G 卡（HE160，接在 PCIe 总线上）。
@@ -102,19 +112,20 @@ for section in $SECTIONS; do
 
 	case "$band" in
 		2g)
-			ssid="@WRT_SSID@"
+			ssid="$SSID_PREFIX-Jdcloud-2.4g"
 			channel=5
 			htmode=HE40
 			;;
 		5g)
-			# 外挂卡是 4x4 HE160，跑低频段（5.2G），单独给它一个 Gaming 名字；
-			# 内置 5G 是 2x2 HE80，跑高频段（5.8G），和 2.4G 共用主 SSID。
+			# 外挂卡是 4x4 HE160，跑低频段（36-64，5.2G）；内置 5G 是 2x2
+			# HE80，跑高频段（149-165，5.8G）。名字跟着信道走，避免出现
+			# "5.2g 的 SSID 实际在 161 信道"这种自相矛盾的组合。
 			if is_pcie_radio "$path"; then
-				ssid="@WRT_SSID@Gaming-5.2G"
+				ssid="$SSID_PREFIX-Jdcloud-5.2g"
 				channel=36
 				htmode=HE160
 			else
-				ssid="@WRT_SSID@"
+				ssid="$SSID_PREFIX-Jdcloud-5.8g"
 				channel=161
 				htmode=HE80
 			fi
@@ -131,7 +142,7 @@ for section in $SECTIONS; do
 	uci set "wireless.$section.channel=$channel"
 	uci set "wireless.$section.htmode=$htmode"
 	uci set "wireless.$iface.encryption=psk2+ccmp"
-	uci set "wireless.$iface.key=@WRT_WORD@"
+	uci set "wireless.$iface.key=$WIFI_KEY"
 done
 
 uci commit wireless

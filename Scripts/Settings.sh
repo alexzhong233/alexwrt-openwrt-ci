@@ -11,21 +11,17 @@ find ./feeds/luci/modules/luci-mod-system/ -type f -name "flash.js" -exec sed -i
 #添加编译日期标识
 find ./feeds/luci/modules/luci-mod-status/ -type f -name "10_system.js" -exec sed -i "s/(\(luciversion || ''\))/(\1) + (' \/ $WRT_MARK-$WRT_DATE')/g" {} +
 
-#修改默认WIFI账号密码
-# 说明：mac80211.uc 在新分支已改为 ucode 生成器（set ${si}.ssid='${defaults?.ssid || 'OWRT'}'），
-# 旧的字面量 sed（ssid 'xxx'）匹配不到任何内容。默认无线改由 Files/RE-CS-02 的
-# 首启脚本 99-niubialex-wireless 设置，这里只负责把入参替换进占位符。
+#默认无线：只注入主机名
+# 说明：SSID 规则固定在首启脚本 99-niubialex-wireless 里
+# （<主机名>-Jdcloud-2.4g / -5.2g / -5.8g，密码 12345678）。脚本运行时从
+# system.@system[0].hostname 现取主机名，这里只把兜底占位符 @WRT_NAME@ 换掉，
+# 防止 hostname 还没写进 uci 时留下一片叫 "@WRT_NAME@" 的网络。
 WIRELESS_DEF="./files/etc/uci-defaults/99-niubialex-wireless"
 if [ -f "$WIRELESS_DEF" ]; then
-	SSID_ESC=$(printf '%s' "${WRT_SSID:-niubiAlex}" | sed 's/[\\&|]/\\&/g')
-	WORD_ESC=$(printf '%s' "${WRT_WORD:-}" | sed 's/[\\&|]/\\&/g')
-	if [ -n "${WRT_WORD:-}" ]; then
-		sed -i "s|@WRT_SSID@|$SSID_ESC|g; s|@WRT_WORD@|$WORD_ESC|g" "$WIRELESS_DEF"
-	else
-		sed -i "s|@WRT_SSID@|$SSID_ESC|g; s/@WRT_WORD@//g; s/=psk2+ccmp/=none/g; /\.key=/d" "$WIRELESS_DEF"
-	fi
+	NAME_ESC=$(printf '%s' "${WRT_NAME:-OpenWrt}" | sed 's/[\\&|]/\\&/g')
+	sed -i "s|@WRT_NAME@|$NAME_ESC|g" "$WIRELESS_DEF"
 else
-	echo "Wireless default script not found, skip SSID injection: $WIRELESS_DEF" >&2
+	echo "Wireless default script not found, skip hostname injection: $WIRELESS_DEF" >&2
 fi
 
 CFG_FILE="./package/base-files/files/bin/config_generate"
