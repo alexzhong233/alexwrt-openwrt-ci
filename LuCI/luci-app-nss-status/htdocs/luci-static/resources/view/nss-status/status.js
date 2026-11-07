@@ -229,8 +229,8 @@ return view.extend({
 		if (vdevs.length === 0) {
 			vdevRows.push(E('tr', { 'class': 'tr placeholder' }, [
 				E('td', { 'class': 'td', 'colspan': '7' }, [
-					stateRaw === ''
-						? '读不到 wifili_rx：NSS 可能没启动，或 debugfs 未挂载（mount -t debugfs none /sys/kernel/debug）'
+					vdevRaw === ''
+						? '读不到 wifili_rx。debugfs 由 /etc/init.d/boot 开机自动挂载，所以更可能是 NSS 核心没启动，或本机没有 vdev 上报过 —— 先看上面「加速状态」那一栏。'
 						: 'NSS 还没有上报过任何 vdev'
 				])
 			]));
