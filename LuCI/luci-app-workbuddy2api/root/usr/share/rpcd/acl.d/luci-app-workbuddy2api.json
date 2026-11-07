@@ -4,8 +4,8 @@
 		"read": {
 			"file": {
 				"/etc/config/workbuddy2api": [ "read" ],
-				"/etc/init.d/workbuddy2api": [ "read" ],
-				"/etc/rc.d/*workbuddy2api": [ "read" ]
+				"/etc/init.d/workbuddy2api": [ "exec" ],
+				"/sbin/logread": [ "exec" ]
 			},
 			"uci": [ "workbuddy2api" ]
 		},

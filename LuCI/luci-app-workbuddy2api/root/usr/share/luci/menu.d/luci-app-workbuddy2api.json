@@ -1,0 +1,31 @@
+{
+	"admin/services/workbuddy2api": {
+		"title": "WorkBuddy2API",
+		"order": 60,
+		"action": {
+			"type": "firstchild"
+		},
+		"depends": {
+			"acl": [ "luci-app-workbuddy2api" ],
+			"uci": { "workbuddy2api": true }
+		}
+	},
+
+	"admin/services/workbuddy2api/status": {
+		"title": "运行状态",
+		"order": 10,
+		"action": {
+			"type": "view",
+			"path": "workbuddy2api/status"
+		}
+	},
+
+	"admin/services/workbuddy2api/config": {
+		"title": "设置",
+		"order": 20,
+		"action": {
+			"type": "view",
+			"path": "workbuddy2api/config"
+		}
+	}
+}
