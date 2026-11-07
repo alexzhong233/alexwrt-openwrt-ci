@@ -24,10 +24,31 @@ PKG_DIR="$(pwd)/package/$PKG_NAME"
 
 warn() { echo "::warning::$*"; }
 
+# ---- 1. 本地 LuCI 界面 ----------------------------------------------------
+# LuCI/ 下每个子目录都是一个独立软件包，全部拷进构建树，以后加页面不用再改这里。
+# 界面是 JS 版（htdocs/luci-static/resources/view/...），没有 luasrc。
+#
+# 这一段必须排在最前面：下面取上游的几步遇到失败会 exit 0 直接跳过整个脚本，
+# 如果把本地界面放在末尾，上游 clone 一失败，Config 里 =y 的
+# luci-app-workbuddy2api / luci-app-nss-status 就不会进构建树。它们不在
+# Packages.sh 的 UPDATE_PACKAGE 列表里，Verify Package Selection 只会当成
+# 「平台不适用」发一条 warning，构建照常走完，固件里却少了页面。
+if [ -d "$REPO_ROOT/LuCI" ]; then
+	for LUCI_SRC in "$REPO_ROOT"/LuCI/*/; do
+		[ -d "$LUCI_SRC" ] || continue
+		LUCI_PKG=$(basename "$LUCI_SRC")
+		rm -rf "./package/$LUCI_PKG"
+		cp -R "$LUCI_SRC" ./package/
+		echo "$LUCI_PKG 就绪：$(find "./package/$LUCI_PKG" -type f \( -name '*.js' -o -name '*.json' \) | wc -l) 个界面文件"
+	done
+else
+	warn "本地 LuCI 目录不存在，网关会装上但没有界面"
+fi
+
 TMP=$(mktemp -d)
 trap 'rm -rf "$TMP"' EXIT
 
-# ---- 1. 取上游 ------------------------------------------------------------
+# ---- 2. 取上游 ------------------------------------------------------------
 if ! git clone --depth 1 --branch "$REPO_BRANCH" "$REPO_URL" "$TMP/repo" >/dev/null 2>&1; then
 	warn "拉取 $REPO_URL 失败，workbuddy2api 不进入本次构建"
 	exit 0
@@ -38,11 +59,11 @@ if [ ! -d "$TMP/repo/wrt/openwrt/$PKG_NAME" ]; then
 	exit 0
 fi
 
-# ---- 2. 包骨架 ------------------------------------------------------------
+# ---- 3. 包骨架 ------------------------------------------------------------
 rm -rf "$PKG_DIR"
 cp -R "$TMP/repo/wrt/openwrt/$PKG_NAME" "$PKG_DIR"
 
-# ---- 3. 补应用源码 --------------------------------------------------------
+# ---- 4. 补应用源码 --------------------------------------------------------
 APP_DST="$PKG_DIR/files/usr/lib/$PKG_NAME"
 mkdir -p "$APP_DST"
 
@@ -75,7 +96,7 @@ fi
 echo "workbuddy2api 就绪：Makefile 版本 ${MAKEFILE_VER:-未知}，应用版本 ${APP_VER:-未知}"
 echo "  应用文件：$(find "$APP_DST" -maxdepth 1 -type f | wc -l) 个"
 
-# ---- 3.5 首次启动初始化 ------------------------------------------------
+# ---- 5. 首次启动初始化 ----------------------------------------------------
 # 上游把这些放在 postinst 里，但编进固件时 postinst 会被 IPKG_INSTROOT 守卫跳过，
 # 设备上又不会重装包，所以必须靠 uci-defaults 在首次启动补一次。
 UCI_DEFAULTS_SRC="$SCRIPT_DIR/uci-defaults/99-workbuddy2api"
@@ -86,19 +107,4 @@ if [ -f "$UCI_DEFAULTS_SRC" ]; then
 	echo "首次启动初始化已挂到 uci-defaults"
 else
 	warn "缺少 $UCI_DEFAULTS_SRC，数据目录和 sysupgrade 保留需要手动处理"
-fi
-
-# ---- 4. 本地 LuCI 界面 ----------------------------------------------------
-# LuCI/ 下每个子目录都是一个独立软件包，全部拷进构建树，以后加页面不用再改这里。
-# 界面是 JS 版（htdocs/luci-static/resources/view/...），没有 luasrc。
-if [ -d "$REPO_ROOT/LuCI" ]; then
-	for LUCI_SRC in "$REPO_ROOT"/LuCI/*/; do
-		[ -d "$LUCI_SRC" ] || continue
-		LUCI_PKG=$(basename "$LUCI_SRC")
-		rm -rf "./package/$LUCI_PKG"
-		cp -R "$LUCI_SRC" ./package/
-		echo "$LUCI_PKG 就绪：$(find "./package/$LUCI_PKG" -type f \( -name '*.js' -o -name '*.json' \) | wc -l) 个界面文件"
-	done
-else
-	warn "本地 LuCI 目录不存在，网关会装上但没有界面"
 fi

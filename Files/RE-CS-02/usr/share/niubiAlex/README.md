@@ -14,15 +14,15 @@
 - OpenAppFilter：`appfilter`、`kmod-oaf`、`luci-app-oaf` 和中文翻译。页面在 LuCI 的“服务 -> 应用过滤”。
 - 雅典娜 LED、Harbor File、OpenList、qBittorrent、UU 游戏加速和 KMS 软件包。
 - NSS 功能主体来自 `VIKINGYFY/immortalwrt`：构建配置显式选择 `nss-firmware`、`kmod-nss-wifi-drv` 和 `ATH11K_NSS_WIFI`，实际 ath11k/mac80211 NSS 补丁也来自该上游源码。
-- `luci-app-nss` 只保留为状态监控页，页面在“状态 -> NPU (NSS) Status”；它不包含 NSS 驱动，不负责打开无线 NSS。
+- 自建状态页 `luci-app-nss-status` 在“状态 -> NSS 卸载”，读 `nss-wifi-drv` 的 debugfs 显示加速状态、各接口收发计数和流转发表；它不包含 NSS 驱动，不负责打开无线 NSS。老旧上游的 `luci-app-nss` 读的是 qca-nss-drv 的目录，在本固件里永远显示未加载，已移除。
 - 首次启动时会为 `netbird up` 安装默认禁用 DNS 的包装器；显式使用 `--disable-dns=false` 仍可恢复 NetBird DNS。
 - NetBird、Dockerman、PassWall 和 OpenClash 默认进入固件；HomeProxy 和 PassWall2 只编译为可安装模块，不默认写入 rootfs。
 - 1Panel LuCI 管理页 `luci-app-istorepanel` 默认进入固件，依赖 Docker；1Panel 容器本体按需部署。
-- ZeroTier、易有云文件管理器和 WorkBuddy2API 不进入固件；WorkBuddy2API 按需通过 Docker 部署。
+- ZeroTier 和易有云文件管理器不进入固件。WorkBuddy2API 本体与 `luci-app-workbuddy2api` 已内置，页面在“服务 -> WorkBuddy2API”。
 
 ## 脚本使用原则
 
-所有脚本都只是手动工具，放在 `/usr/bin/`，不会自动注册为 `/etc/init.d` 服务，不会自动 `enable`，也不会因为安装固件而自行执行。只有明确运行命令后才会检查或修改配置。
+`/usr/bin/` 下的脚本都是手动工具，不会因为刷入固件就自行执行或改动配置，只有明确运行后才会检查或修改。NetBird 兼容规则另有一个 `/etc/init.d/netbird-passwall-compat-watch` 事件守护脚本，但默认不 `enable`，需要时手动启用；它与轮询式 `netbird-passwall-compat` 二选一，不要同时开。
 
 遇到问题时，先运行诊断脚本，再根据诊断结果选择对应的修复脚本。不要为了“预防”而把所有脚本都运行一遍。
 
