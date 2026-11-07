@@ -37,15 +37,21 @@ jobs:
       WRT_WORD: "88888888"
       WRT_IP: 192.168.88.1
       WRT_PW: 不设置，首次登录后自行设置
-      # 上游用 577090447/immortalwrt 而不是 VIKINGYFY/immortalwrt。
-      # 两者同源（前者是后者的 fork），差别在于前者把整条 NSS 链路做进去了：
-      # package/qca-nss 下有 qca-nss-drv / ecm / dp / clients / crypto / phy /
-      # mcs / ssdk，并且写进了 qualcommax 的 DEFAULT_PACKAGES。
-      # VIKINGYFY/owrt 只有 kmod-nss-wifi-drv（Wi-Fi 侧加速），没有数据平面，
-      # 所以 luci-app-nss 永远显示「未加载」。
-      WRT_REPO: https://github.com/577090447/immortalwrt.git
-      WRT_BRANCH: main
-      WRT_SOURCE: 577090447/immortalwrt
+      # 上游用 VIKINGYFY/immortalwrt 的 owrt 分支。
+      #
+      # 这套上游的 NSS 走 nss-wifi-drv：它自己 boot NSS 固件，用 wifili 把无线帧
+      # 直接送进 NSS 硬件，是真正生效的无线加速。实测
+      #   /sys/bus/platform/devices/39000000.nss/state → ready=1 peers=5 wlan=3
+      #   日志 → "bring-up survived; NSS data plane ready"
+      #
+      # 577090447/main 那套是 qca-nss-drv + ecm 的完整数据平面，卸载的是有线转发；
+      # 它没有 wifili，WiFi 的包进 NSS 后只能走 exception 退回 CPU，所以状态页虽然
+      # 有计数，无线本身并没有加速。此外它会去掉 qca-ppe-qos 和 luci-app-router-tool。
+      #
+      # 家里现在以 WiFi 为主，将来有线玩游戏流量也小，CPU 软转发足够，故选 owrt。
+      WRT_REPO: https://github.com/VIKINGYFY/immortalwrt.git
+      WRT_BRANCH: owrt
+      WRT_SOURCE: VIKINGYFY/immortalwrt
       WRT_EXTRA_CONFIG: IPQ60XX-NIUBIALEX-OVERRIDES.txt
       WRT_PACKAGE: ${{inputs.PACKAGE}}
       WRT_TEST: ${{inputs.TEST || false}}

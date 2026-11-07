@@ -9,13 +9,17 @@ CONFIG_PACKAGE_kmod-oaf=y
 CONFIG_PACKAGE_luci-app-oaf=y
 CONFIG_PACKAGE_luci-i18n-oaf-zh-cn=y
 
-# NSS 数据平面由 577090447/immortalwrt 的 qualcommax DEFAULT_PACKAGES 提供：
-# kmod-qca-nss-drv / ecm / dp / ssdk / crypto，外加各 offload manager。
-# 上游自动带，不需要在这里逐个选。luci-app-nss 只负责读 debugfs 计数器。
-# 注意：VIKINGYFY/owrt 分支没有这些，只有 kmod-nss-wifi-drv，所以以前这里
-# 选的 wifi-drv 相关项在新上游不存在，已删除，否则 defconfig 会报包不存在。
+# NSS 无线加速由上游的 nss-wifi-drv 提供：它自己 boot NSS 固件，用 wifili 把
+# 无线帧直接送进 NSS 硬件。实测 /sys/bus/platform/devices/39000000.nss/state 里
+#   ready=1  peers=5  wlan=3  rings_ready=1
+# wlan=3 是位掩码 1|2，表示内置 AHB 和外挂 PCIe 卡两路都已卸载。
+#
+# CONFIG_ATH11K_NSS_WIFI 必须为 y：它决定 /usr/share/nss-wifi/wlan 的内容是 1，
+# 少了这行，启动脚本会认为本机没有可卸载的 WiFi，直接退回 host path。
 CONFIG_PACKAGE_nss-firmware=y
-CONFIG_PACKAGE_luci-app-nss=y
+CONFIG_PACKAGE_kmod-nss-wifi-drv=y
+CONFIG_ATH11K_NSS_WIFI=y
+CONFIG_NSS_FIRMWARE_VERSION_12_5=y
 
 # 固件内置：NetBird、Dockerman、PassWall、OpenClash
 CONFIG_PACKAGE_netbird=y

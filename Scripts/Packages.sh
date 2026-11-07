@@ -315,25 +315,24 @@ if [[ "${WRT_APPFILTER,,}" == "true" ]]; then
 	rm -rf "$OAF_TMP"
 fi
 
-# NSS status LuCI page. It only reads available NSS/ECM debugfs counters.
-# 数据平面来自上游 base tree：577090447/immortalwrt 带 qca-nss-drv/ecm，
-# VIKINGYFY/immortalwrt 只有 nss-wifi-drv（Wi-Fi 侧加速，无数据平面）。
-# 这里只做提示，装不装监控页都一样。
-if [ -d ./package/qca-nss/qca-nss-drv ]; then
-	echo "NSS data plane found (qca-nss-drv/ecm); luci-app-nss will show live counters."
-elif [ -d ./package/qca-nss/nss-wifi-drv ]; then
-	echo "Only the Wi-Fi side NSS driver is present; luci-app-nss stays monitor-only."
+# NSS 走上游的 nss-wifi-drv：它自己 boot NSS 固件，用 wifili 把无线帧直接送进
+# NSS 硬件（日志里的 "wifili: radio 0 rxdma"），是真正生效的无线加速。
+# 这里只做存在性检查，装不装由 Config 决定。
+#
+# 以前还会 clone yduke/luci-app-nss 装上监控页，但那个页面读的是
+# /sys/kernel/debug/qca-nss-drv/stats 和 /sys/kernel/debug/ecm/，只有
+# qca-nss-drv + ecm 那套数据平面才会创建这两个目录。本上游用 nss-wifi-drv，
+# 目录永远不存在，页面就会一直显示「未加载」，让人误以为加速没工作。
+# 真实状态在 /sys/bus/platform/devices/39000000.nss/state（ready=1 / peers=N /
+# wlan=3）和 logread -e nss-wifi，所以不再装那个页面。
+if [ -d ./package/qca-nss/nss-wifi-drv ]; then
+	echo "NSS Wi-Fi offload driver present (nss-wifi-drv)."
+	echo "  live state: /sys/bus/platform/devices/39000000.nss/state"
+elif [ -d ./package/qca-nss/qca-nss-drv ]; then
+	echo "::warning::Base tree carries the qca-nss-drv data plane instead of nss-wifi-drv; Wi-Fi frames would fall back to the host path." >&2
 else
-	echo "No NSS packages in the base tree; luci-app-nss will have nothing to read."
+	echo "::warning::No NSS packages in the base tree; Wi-Fi will run on the host path." >&2
 fi
-NSS_TMP=$(mktemp -d)
-clone_repo "yduke/luci-app-nss" "master" "$NSS_TMP/luci-app-nss"
-rm -rf ./package/luci-app-nss
-mkdir -p ./package/luci-app-nss
-cp -a "$NSS_TMP/luci-app-nss/Makefile" ./package/luci-app-nss/
-cp -a "$NSS_TMP/luci-app-nss/htdocs" ./package/luci-app-nss/
-cp -a "$NSS_TMP/luci-app-nss/root" ./package/luci-app-nss/
-rm -rf "$NSS_TMP"
 
 UPDATE_PACKAGE "easytier" "EasyTier/luci-app-easytier" "main"
 UPDATE_PACKAGE "qmodem" "FUjr/QModem" "main"
