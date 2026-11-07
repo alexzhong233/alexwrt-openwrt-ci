@@ -7,7 +7,7 @@
 - 板载 2.4 GHz：SSID `niubiAlex`，信道 `5`，`HE40`。
 - 板载 5 GHz：SSID `niubiAlex`，信道 `161`，`HE80`。
 - PCIe/5.2 GHz：SSID `niubiAlexGaming`，信道 `36`，`HE160`。
-- 默认无线名：`<主机名>-Jdcloud-2.4g` / `-5.2g` / `-5.8g`（主机名默认 `alexWrt`，即 `alexWrt-Jdcloud-2.4g` 等三个），密码统一 `12345678`，首次启动后建议修改。
+- 无线使用上游默认规则：首次启动时按硬件生成，SSID 为上游默认值，WPA2 密钥随机生成。用 `uci show wireless | grep -E 'ssid|key'` 查看，登录后建议在 LuCI 里自行修改；改过之后不会有任何脚本再覆盖。
 
 ## 固件内置内容
 

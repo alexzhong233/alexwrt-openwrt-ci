@@ -42,15 +42,9 @@
 
 默认密码 `88888888`，首次启动后建议修改。
 
-无线名固定为「主机名-Jdcloud-频段」，密码统一 `12345678`：
+无线不做任何定制，完全走上游规则：首次启动时 `/sbin/wifi config` 按硬件生成 `/etc/config/wireless`，三个 radio（2.4G / 5.2G / 5.8G）各自一套，SSID 取上游默认值，WPA2 密钥随机生成。第一次登录后可以在 LuCI 里自行修改，之后不会被任何脚本覆盖。
 
-| 频段 | SSID | 信道 | htmode |
-|---|---|---|---|
-| 2.4G | `<主机名>-Jdcloud-2.4g` | 5 | HE40 |
-| 5.2G（外挂 4x4） | `<主机名>-Jdcloud-5.2g` | 36 | HE160 |
-| 5.8G（内置 2x2） | `<主机名>-Jdcloud-5.8g` | 161 | HE80 |
-
-主机名来自 `NIUBIALEX.yml` 的 `WRT_NAME`（当前 `alexWrt`）。首启脚本 `Files/RE-CS-02/etc/uci-defaults/99-niubialex-wireless` 在第一次启动时读 `system.@system[0].hostname` 现拼 SSID，所以改主机名重刷固件，无线名会跟着变；名字里的频段和实际信道永远是配套的。信道和 `htmode` 也固定在这个脚本里，脚本只在首次启动执行一次，之后在 LuCI 里改过不会再被覆盖。
+原先有一个首启脚本 `Files/RE-CS-02/etc/uci-defaults/99-niubialex-wireless` 会改 SSID 和密码，已删除：它在「无线还没就绪」时返回 1，而 `uci_apply_defaults` 只删除返回 0 的脚本，于是脚本被留下来每次启动重试；重试一旦成功，就会把用户改过的无线设置覆盖回默认值。
 
 ## 固件内置内容
 

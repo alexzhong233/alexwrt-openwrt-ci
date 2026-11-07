@@ -11,18 +11,12 @@ find ./feeds/luci/modules/luci-mod-system/ -type f -name "flash.js" -exec sed -i
 #添加编译日期标识
 find ./feeds/luci/modules/luci-mod-status/ -type f -name "10_system.js" -exec sed -i "s/(\(luciversion || ''\))/(\1) + (' \/ $WRT_MARK-$WRT_DATE')/g" {} +
 
-#默认无线：只注入主机名
-# 说明：SSID 规则固定在首启脚本 99-niubialex-wireless 里
-# （<主机名>-Jdcloud-2.4g / -5.2g / -5.8g，密码 12345678）。脚本运行时从
-# system.@system[0].hostname 现取主机名，这里只把兜底占位符 @WRT_NAME@ 换掉，
-# 防止 hostname 还没写进 uci 时留下一片叫 "@WRT_NAME@" 的网络。
-WIRELESS_DEF="./files/etc/uci-defaults/99-niubialex-wireless"
-if [ -f "$WIRELESS_DEF" ]; then
-	NAME_ESC=$(printf '%s' "${WRT_NAME:-OpenWrt}" | sed 's/[\\&|]/\\&/g')
-	sed -i "s|@WRT_NAME@|$NAME_ESC|g" "$WIRELESS_DEF"
-else
-	echo "Wireless default script not found, skip hostname injection: $WIRELESS_DEF" >&2
-fi
+#无线不做任何定制
+# SSID 和密码完全交给上游的 mac80211 生成规则：首次启动时 /sbin/wifi config
+# 按硬件生成 /etc/config/wireless，SSID 取上游默认值，密钥随机生成。
+# 这里以前有一份 Files/RE-CS-02/etc/uci-defaults/99-niubialex-wireless 去改
+# SSID/密码，但它返回 1 时会被 uci_apply_defaults 留在原地重试，重试成功就会
+# 覆盖用户在 LuCI 里改过的配置（表现为每次重启无线设置被重置），已删除。
 
 CFG_FILE="./package/base-files/files/bin/config_generate"
 #修改默认IP地址

@@ -516,8 +516,8 @@ jobs:
             登录地址：${{env.WRT_IP}}
             登录密码：${{env.WRT_PW}}
 
-            WIFI名称：${{env.WRT_NAME}}-Jdcloud-2.4g / -5.2g / -5.8g
-            WIFI密码：12345678
+            WIFI名称：上游默认（首次启动按硬件生成）
+            WIFI密码：随机生成，见路由器 /etc/config/wireless
 
             内核版本：${{env.WRT_KVER}}
             插件列表：${{env.WRT_LIST}}
