@@ -4,6 +4,7 @@
 
 FEEDS_PATH="./feeds"
 PACKAGE_PATH="./package"
+TARGET_PATH="./target"
 
 #修补命令统一入口：FIX <名称> <守卫目录> <命令...>
 #守卫目录不存在时直接跳过，保证在 bash -e 下不中断
@@ -74,5 +75,24 @@ if [ -n "$UUGAME_MAKEFILE" ]; then
 		echo "uugamebooster has been fixed!"
 	else
 		echo "uugamebooster fix failed; continuing!"
+	fi
+fi
+
+#从设备默认包列表里去掉 luci-i18n-athena-led-zh-cn
+#
+#上游 target/linux/qualcommax/image/ipq60xx.mk 里 jdcloud_re-cs-02 的
+#DEVICE_PACKAGES 写死了 luci-app-athena-led 和 luci-i18n-athena-led-zh-cn。
+#后者是上游 1.0 界面包用 luci.mk 拆出来的 i18n 包；我们把界面换成
+#577090447 的 2.5.0 版（用 package.mk 打包，中文 lmo 由 install 段直接装，
+#不拆独立 i18n 包），这个包就不存在了。DEVICE_PACKAGES 会经 defconfig 写进
+#.config，于是在打 target-dir 时 apk 报：
+#	ERROR: unable to select packages:
+#	  luci-i18n-athena-led-zh-cn (no such package)
+#只能从设备定义这一层去掉，光改 Config 是没用的。
+ATHENA_IMAGE_MK="$TARGET_PATH/linux/qualcommax/image/ipq60xx.mk"
+if [ -f "$ATHENA_IMAGE_MK" ]; then
+	echo " "
+	if sed -i 's/ *luci-i18n-athena-led-zh-cn//g' "$ATHENA_IMAGE_MK"; then
+		echo "athena-led i18n package dropped from DEVICE_PACKAGES"
 	fi
 fi
