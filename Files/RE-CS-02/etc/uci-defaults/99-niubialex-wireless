@@ -102,19 +102,19 @@ for section in $SECTIONS; do
 
 	case "$band" in
 		2g)
-			ssid="@WRT_SSID@-2.4G"
+			ssid="@WRT_SSID@"
 			channel=5
 			htmode=HE40
 			;;
 		5g)
-			# 外挂卡是 4x4 HE160，跑低频段（5.2G）；内置 5G 是 2x2 HE80，
-			# 跑高频段（5.8G）。SSID 直接按这个对应关系命名。
+			# 外挂卡是 4x4 HE160，跑低频段（5.2G），单独给它一个 Gaming 名字；
+			# 内置 5G 是 2x2 HE80，跑高频段（5.8G），和 2.4G 共用主 SSID。
 			if is_pcie_radio "$path"; then
-				ssid="@WRT_SSID@-5.2G"
+				ssid="@WRT_SSID@Gaming-5.2G"
 				channel=36
 				htmode=HE160
 			else
-				ssid="@WRT_SSID@-5.8G"
+				ssid="@WRT_SSID@"
 				channel=161
 				htmode=HE80
 			fi

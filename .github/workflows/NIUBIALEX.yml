@@ -32,14 +32,20 @@ jobs:
       # 不写就会被识别成 none，文件名变成 ...-none-<日期>.bin
       WRT_CONFIG: IPQ60XX-NIUBIALEX-WIFI-YES
       WRT_THEME: aurora
-      WRT_NAME: niubiAlex
+      WRT_NAME: alexWrt
       WRT_SSID: niubiAlex
       WRT_WORD: "12345678"
       WRT_IP: 192.168.88.1
       WRT_PW: 不设置，首次登录后自行设置
-      WRT_REPO: https://github.com/VIKINGYFY/immortalwrt.git
-      WRT_BRANCH: owrt
-      WRT_SOURCE: VIKINGYFY/immortalwrt
+      # 上游用 577090447/immortalwrt 而不是 VIKINGYFY/immortalwrt。
+      # 两者同源（前者是后者的 fork），差别在于前者把整条 NSS 链路做进去了：
+      # package/qca-nss 下有 qca-nss-drv / ecm / dp / clients / crypto / phy /
+      # mcs / ssdk，并且写进了 qualcommax 的 DEFAULT_PACKAGES。
+      # VIKINGYFY/owrt 只有 kmod-nss-wifi-drv（Wi-Fi 侧加速），没有数据平面，
+      # 所以 luci-app-nss 永远显示「未加载」。
+      WRT_REPO: https://github.com/577090447/immortalwrt.git
+      WRT_BRANCH: main
+      WRT_SOURCE: 577090447/immortalwrt
       WRT_EXTRA_CONFIG: IPQ60XX-NIUBIALEX-OVERRIDES.txt
       WRT_PACKAGE: ${{inputs.PACKAGE}}
       WRT_TEST: ${{inputs.TEST || false}}

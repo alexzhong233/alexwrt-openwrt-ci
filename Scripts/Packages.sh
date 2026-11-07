@@ -285,12 +285,15 @@ if [[ "${WRT_APPFILTER,,}" == "true" ]]; then
 fi
 
 # NSS status LuCI page. It only reads available NSS/ECM debugfs counters.
-# The actual NSS firmware, host driver and ath11k/mac80211 NSS patches are
-# supplied by the VIKINGYFY/immortalwrt base selected by the device workflow.
-if [ -d ./package/qca-nss/nss-firmware ] && [ -d ./package/qca-nss/nss-wifi-drv ]; then
-	echo "VIKING NSS firmware and host driver found in the base source tree."
+# 数据平面来自上游 base tree：577090447/immortalwrt 带 qca-nss-drv/ecm，
+# VIKINGYFY/immortalwrt 只有 nss-wifi-drv（Wi-Fi 侧加速，无数据平面）。
+# 这里只做提示，装不装监控页都一样。
+if [ -d ./package/qca-nss/qca-nss-drv ]; then
+	echo "NSS data plane found (qca-nss-drv/ecm); luci-app-nss will show live counters."
+elif [ -d ./package/qca-nss/nss-wifi-drv ]; then
+	echo "Only the Wi-Fi side NSS driver is present; luci-app-nss stays monitor-only."
 else
-	echo "VIKING NSS base packages are not present; luci-app-nss will remain monitor-only."
+	echo "No NSS packages in the base tree; luci-app-nss will have nothing to read."
 fi
 NSS_TMP=$(mktemp -d)
 clone_repo "yduke/luci-app-nss" "master" "$NSS_TMP/luci-app-nss"

@@ -9,12 +9,12 @@ CONFIG_PACKAGE_kmod-oaf=y
 CONFIG_PACKAGE_luci-app-oaf=y
 CONFIG_PACKAGE_luci-i18n-oaf-zh-cn=y
 
-# NSS 功能主体来自 VIKINGYFY/immortalwrt：NSS 固件、Wi-Fi 主机驱动和
-# ath11k/mac80211 NSS 补丁由上游源码提供。luci-app-nss 只负责状态监控。
+# NSS 数据平面由 577090447/immortalwrt 的 qualcommax DEFAULT_PACKAGES 提供：
+# kmod-qca-nss-drv / ecm / dp / ssdk / crypto，外加各 offload manager。
+# 上游自动带，不需要在这里逐个选。luci-app-nss 只负责读 debugfs 计数器。
+# 注意：VIKINGYFY/owrt 分支没有这些，只有 kmod-nss-wifi-drv，所以以前这里
+# 选的 wifi-drv 相关项在新上游不存在，已删除，否则 defconfig 会报包不存在。
 CONFIG_PACKAGE_nss-firmware=y
-CONFIG_PACKAGE_kmod-nss-wifi-drv=y
-CONFIG_ATH11K_NSS_WIFI=y
-CONFIG_NSS_FIRMWARE_VERSION_12_5=y
 CONFIG_PACKAGE_luci-app-nss=y
 
 # 固件内置：NetBird、Dockerman、PassWall、OpenClash
