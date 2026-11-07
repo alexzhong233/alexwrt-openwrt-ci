@@ -15,13 +15,11 @@
 set -e
 
 PKG_NAME="workbuddy2api"
-LUCI_PKG="luci-app-workbuddy2api"
 REPO_URL="https://github.com/ardeyouxipianyi/workbuddy2api-hub"
 REPO_BRANCH="main"
 
 SCRIPT_DIR=$(cd "$(dirname "$0")" && pwd)
 REPO_ROOT=$(dirname "$SCRIPT_DIR")
-LUCI_SRC="$REPO_ROOT/LuCI/$LUCI_PKG"
 PKG_DIR="$(pwd)/package/$PKG_NAME"
 
 warn() { echo "::warning::$*"; }
@@ -90,11 +88,17 @@ else
 	warn "缺少 $UCI_DEFAULTS_SRC，数据目录和 sysupgrade 保留需要手动处理"
 fi
 
-# ---- 4. LuCI 界面 --------------------------------------------------------
-if [ -d "$LUCI_SRC" ]; then
-	rm -rf "./package/$LUCI_PKG"
-	cp -R "$LUCI_SRC" ./package/
-	echo "$LUCI_PKG 就绪：$(find "./package/$LUCI_PKG/luasrc" -type f | wc -l) 个 Lua 文件"
+# ---- 4. 本地 LuCI 界面 ----------------------------------------------------
+# LuCI/ 下每个子目录都是一个独立软件包，全部拷进构建树，以后加页面不用再改这里。
+# 界面是 JS 版（htdocs/luci-static/resources/view/...），没有 luasrc。
+if [ -d "$REPO_ROOT/LuCI" ]; then
+	for LUCI_SRC in "$REPO_ROOT"/LuCI/*/; do
+		[ -d "$LUCI_SRC" ] || continue
+		LUCI_PKG=$(basename "$LUCI_SRC")
+		rm -rf "./package/$LUCI_PKG"
+		cp -R "$LUCI_SRC" ./package/
+		echo "$LUCI_PKG 就绪：$(find "./package/$LUCI_PKG" -type f \( -name '*.js' -o -name '*.json' \) | wc -l) 个界面文件"
+	done
 else
-	warn "本地 $LUCI_SRC 不存在，网关会装上但没有 LuCI 界面"
+	warn "本地 LuCI 目录不存在，网关会装上但没有界面"
 fi
