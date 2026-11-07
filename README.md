@@ -78,7 +78,7 @@ SSID 和密码来自 `NIUBIALEX.yml` 的 `WRT_SSID` / `WRT_WORD`：编译时 `Sc
 /usr/bin/netbird-passwall-compat.sh --once
 ```
 
-确认输出的 mark 和链就是当前规则后，可以注册为 procd 服务。默认 30 秒检查一次，只在规则缺失或 mark 变化时补回，不重复插入，也不会重启 NetBird、PassWall 或路由器：
+确认输出的 mark 和链就是当前规则后，可以注册为 procd 服务。默认 30 秒检查一次，只在规则缺失或 mark 变化时补回，不重复插入，也不会重启 NetBird、PassWall 或路由器。检查的是**规则位置**而不只是"存在"——这条 `return` 必须排在会改写 mark 的规则之前，一旦被挤到后面就删掉重插到第一位，并写一条日志：
 
 ```sh
 /etc/init.d/netbird-passwall-compat enable
@@ -87,6 +87,33 @@ SSID 和密码来自 `NIUBIALEX.yml` 的 `WRT_SSID` / `WRT_WORD`：编译时 `Sc
 ```
 
 临时提高频率：`INTERVAL=10 /etc/init.d/netbird-passwall-compat restart`；单次检查也可以用 `INTERVAL=5 /usr/bin/netbird-passwall-compat.sh --once`。停止用 `disable` + `stop`。之前用 `nohup` 起过旧进程的话，先执行一次 `pkill -f '[n]etbird-passwall-compat.sh'`，避免手动进程和 procd 同时运行。
+
+### netbird-passwall-compat-watch.sh
+
+同一套规则改成事件驱动：用 `nft monitor` 订阅 nftables 的规则变更，NetBird 一重建 prerouting 链就立即补回，恢复时间从“最多一个轮询周期”降到毫秒级。规则发现和插入仍由 `netbird-passwall-compat.sh --once` 完成，只有一份实现。
+
+**和 `netbird-passwall-compat` 二选一，不能同时启用。** 轮询服务在整个生命周期内持有同一把补丁锁，事件补回会被锁挡成空操作（脚本启动时会检测并写警告）。
+
+```sh
+/etc/init.d/netbird-passwall-compat disable
+/etc/init.d/netbird-passwall-compat stop
+/etc/init.d/netbird-passwall-compat-watch enable
+/etc/init.d/netbird-passwall-compat-watch start
+```
+
+`enable` 只需要执行一次：它生成 `/etc/rc.d` 下的开机软链，之后每次开机 procd 自动拉起，`sysupgrade` 升级也保留。只 `enable` 不 `start` 的话本次开机不生效、下次重启才生效；不 `enable` 就永远不会自动运行。固件不做首启自动启用。
+
+事件不能作为唯一依据：netlink 接收缓冲溢出（ENOBUFS）时会**静默丢事件**，所以默认保留 60 秒兜底检查，`WATCHDOG=0` 关闭、`WATCHDOG=120` 放宽。monitor 意外退出时会先全量校验一次再按指数退避重连。
+
+开服务前先在本机验证事件延迟：
+
+```sh
+/usr/bin/netbird-passwall-compat-watch.sh --test
+```
+
+另开一个窗口增删一条规则，看打印出来的时间戳。如果事件明显滞后，说明 `nft monitor` 的 stdout 在管道里是全缓冲，装上 `coreutils-stdbuf` 后脚本会自动用它强制行缓冲。
+
+单一实例由 `/var/run/netbird-passwall-compat-watch.lock` 保证；`stop` 没有清理干净的锁会在下次启动时按 PID 自动回收。
 
 ### netbird-dnsmasq-wt0-fix.sh
 
@@ -110,7 +137,7 @@ SSID 和密码来自 `NIUBIALEX.yml` 的 `WRT_SSID` / `WRT_WORD`：编译时 `Sc
 | `netbird-passwall-diagnose.sh` | 收集 NetBird、PassWall、DNS、路由、防火墙和 NSS 状态，不改配置 |
 | `netbird-dns-guard.sh` | `check` 查 DNS 状态；`apply` 禁用 NetBird DNS 并重启 dnsmasq；`restore` 恢复 |
 | `netbird-passwall-lan-fix.sh` | `check` / `apply` / `rollback`，管理 NetBird 网络与防火墙区域、转发规则 |
-| `export-router-state.sh` | 升级前导出软件包清单、UCI 配置、服务状态和脚本；`INCLUDE_SECRETS=1` 才包含敏感字段 |
+| `export-router-state.sh` | 升级前导出软件包清单、UCI 配置、服务状态和脚本；默认按键名和值特征启发式脱敏，`INCLUDE_SECRETS=1` 才原样导出 |
 | `restore-package-list.sh` | 按清单重装软件包，不恢复配置、Docker 卷、证书和令牌 |
 
 常用命令：

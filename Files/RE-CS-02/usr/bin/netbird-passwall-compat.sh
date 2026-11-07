@@ -9,6 +9,8 @@ RULE_TAG="PW-NB-COMPAT"
 INTERVAL="${INTERVAL:-30}"
 LOCK_DIR="${LOCK_DIR:-/var/run/netbird-passwall-compat.lock}"
 LAST_STATE=""
+# ensure_rule 的副作用标记：missing / misplaced / 空（无需改动）
+RULE_ACTION=""
 
 log() {
 	logger -t "$TAG" "$*"
@@ -198,20 +200,68 @@ delete_owned_rules() {
 		done
 }
 
+# 判断豁免规则的位置是否有效。只检查"存在"是不够的：这条 return 必须排在
+# 任何会改写 mark 的规则之前，否则等于没生效——而那种状态下列表看起来完全正常。
+# 输出：ok / missing / misplaced <handle>
+check_rule_position() {
+	printf '%s\n' "$1" | awk -v mark="$2" '
+		/^[[:space:]]*chain[[:space:]]/ { next }
+		/type filter hook/ { next }
+		/# handle [0-9]+/ {
+			idx++
+			handle = ""
+			if (match($0, /# handle [0-9]+/))
+				handle = substr($0, RSTART + 9, RLENGTH - 9)
+
+			if (!ours && index($0, "meta mark " mark) && $0 ~ /return/) {
+				ours = idx
+				ours_handle = handle
+			} else if (!first_set && index($0, "meta mark set")) {
+				first_set = idx
+			}
+		}
+		END {
+			if (!ours)
+				print "missing"
+			else if (!first_set || ours < first_set)
+				print "ok"
+			else
+				print "misplaced " ours_handle
+		}
+	'
+}
+
 ensure_rule() {
 	local FAMILY="$1"
 	local TABLE="$2"
 	local CHAIN="$3"
 	local PW_MARK="$4"
 	local RULES
+	local STATE
+	local HANDLE
 
 	RULES=$(nft -a list chain "$FAMILY" "$TABLE" "$CHAIN" 2>/dev/null) || return 1
 
-	# Accept an existing untagged rule. This preserves the current handle 33
-	# rule and avoids replacing rules created by PassWall or manually.
-	if printf '%s\n' "$RULES" | grep -Eq "meta mark $PW_MARK return([[:space:]]|#|$)"; then
+	STATE=$(check_rule_position "$RULES" "$PW_MARK")
+
+	case "$STATE" in
+	ok)
+		# 规则在且位置对：保留现有 handle，不动计数器和注释。
+		RULE_ACTION=""
 		return 0
-	fi
+		;;
+	misplaced*)
+		# 规则在但排到了覆盖规则后面。内容和我们要插的完全一致，
+		# 删掉它再插到第一位，否则这条豁免永远不会命中。
+		HANDLE=$(printf '%s\n' "$STATE" | awk '{print $2}')
+		[ -n "$HANDLE" ] &&
+			nft delete rule "$FAMILY" "$TABLE" "$CHAIN" handle "$HANDLE" 2>/dev/null
+		RULE_ACTION="misplaced"
+		;;
+	*)
+		RULE_ACTION="missing"
+		;;
+	esac
 
 	# Only remove rules created by this script, including an old discovered mark.
 	delete_owned_rules "$FAMILY" "$TABLE" "$CHAIN"
@@ -241,8 +291,13 @@ run_once() {
 	TABLE="$2"
 	CHAIN="$3"
 
+	RULE_ACTION=""
 	if ensure_rule "$FAMILY" "$TABLE" "$CHAIN" "$PW_MARK"; then
-		printf '兼容规则已存在或已安装。\n'
+		case "$RULE_ACTION" in
+		missing) printf '兼容规则缺失，已补回。\n' ;;
+		misplaced) printf '兼容规则排在覆盖规则之后（等于没生效），已删除并重插到第一位。\n' ;;
+		*) printf '兼容规则已存在且位置正确。\n' ;;
+		esac
 		return 0
 	fi
 
@@ -273,16 +328,28 @@ cycle() {
 		FAMILY="$1"
 		TABLE="$2"
 		CHAIN="$3"
+		RULE_ACTION=""
 		if ensure_rule "$FAMILY" "$TABLE" "$CHAIN" "$PW_MARK"; then
 			STATE="ready:$FAMILY:$TABLE:$CHAIN:$PW_MARK"
-			MESSAGE="兼容规则正常：$FAMILY $TABLE $CHAIN / $PW_MARK"
+			case "$RULE_ACTION" in
+			missing)
+				MESSAGE="已补回兼容规则：$FAMILY $TABLE $CHAIN / $PW_MARK"
+				;;
+			misplaced)
+				MESSAGE="豁免规则排在覆盖规则之后，已删除并重插到第一位：$FAMILY $TABLE $CHAIN / $PW_MARK"
+				;;
+			*)
+				MESSAGE="兼容规则正常：$FAMILY $TABLE $CHAIN / $PW_MARK"
+				;;
+			esac
 		else
 			STATE="error:$FAMILY:$TABLE:$CHAIN:$PW_MARK"
 			MESSAGE="无法在 $FAMILY $TABLE $CHAIN 安装兼容规则"
 		fi
 	fi
 
-	if [ "$STATE" != "$LAST_STATE" ]; then
+	# 规则被补回或纠正时，STATE 字符串和上一轮相同，只看状态会把这件事故意吞掉。
+	if [ "$STATE" != "$LAST_STATE" ] || [ -n "$RULE_ACTION" ]; then
 		log "$MESSAGE"
 		LAST_STATE="$STATE"
 	fi
