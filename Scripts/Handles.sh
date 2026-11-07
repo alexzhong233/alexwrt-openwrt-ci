@@ -54,12 +54,19 @@ FIX "natmapt" "$PACKAGE_PATH/luci-app-natmapt" sed -i "s/network/services/g" \
 #处理方式：chmod 加 2>/dev/null 容错，末尾补 exit 0 收尾，再用 IPKG_INSTROOT
 #守卫让脚本只在设备上真正执行。注意 Makefile 里必须写成 $$IPKG_INSTROOT，
 #单写 $ 会被 make 当成变量展开，守卫条件会永久成立。
+#
+#另外把 DEPENDS 里的 +libstdcpp6 换成 +libstdcpp：新版 OpenWrt 已经把 C++ 标准库
+#包改名（package/libs/toolchain 里只有 define Package/libstdcpp）。保留旧名会打出
+#	WARNING: ... luci-app-uugamebooster/Makefile has a dependency on
+#	'libstdcpp6', which does not exist
+#依赖不满足时 defconfig 会把这个包降成 is not set，固件里就没有 UU 页面了。
 UUGAME_MAKEFILE=$(find "$PACKAGE_PATH" -maxdepth 3 -type f \
 	-path "*luci-app-uugamebooster*/Makefile" 2>/dev/null | head -1)
 
 if [ -n "$UUGAME_MAKEFILE" ]; then
 	echo " "
 	if sed -i \
+		-e 's/+libstdcpp6/+libstdcpp/g' \
 		-e '/^#!\/bin\/sh$/a [ -n "$$IPKG_INSTROOT" ] \&\& exit 0' \
 		-e 's|^chmod +x \(.*\)$|chmod +x \1 2>/dev/null|' \
 		-e 's/^endef$/exit 0\nendef/' \

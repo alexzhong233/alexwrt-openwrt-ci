@@ -195,6 +195,17 @@ fi
 
 # 雅典娜 RE-CS-02 LED：使用控制器仓库根目录下的两个 OpenWrt 软件包。
 # 该仓库没有 pkg/ 父目录，因此分别提取 athena-led 和 luci-app-athena-led。
+#
+# 先把上游 package/emortal 自带的同名包删掉。它是 1.0 版（Lua CBI 界面，
+# conffiles 里声明 /etc/config/athena_led，还自带 etc/init.d/athena_led），
+# 和下面拷入的 2.5.0 版同名；scan.mk 扫到 package/emortal/luci-app-athena-led
+# 时会覆盖 package/luci-app-athena-led，于是固件里装的一直是这个老包。
+# 它和 athena-led 2.5.0 本体抢同样的两个文件，apk 直接拒绝安装整个 rootfs：
+#   ERROR: luci-app-athena-led-1.0-r20260610: trying to overwrite
+#     etc/config/athena_led owned by athena-led-2.5.0-r1
+# 删掉上游那份，让配套的 2.5.0 界面生效（它只装界面，不碰 config/init）。
+rm -rf ./package/emortal/luci-app-athena-led
+
 UPDATE_NESTED_PACKAGE "athena-led" \
 	"577090447/JDC-AX6600-Athena-LED-Controller" \
 	"main" \
