@@ -122,7 +122,7 @@ cat /proc/net/dev | grep tun             # 隔 10 秒看两次，tun163 的 RX/T
 | `Scripts/` | 构建期脚本（软件包下载、设置注入、上游修补） |
 | `Config/` | 设备与软件包配置 |
 | `Files/RE-CS-02/` | 直接注入固件 rootfs 的文件 |
-| `docs/` | 基线对比、仓库对比、软件清单等分析文档 |
+| `docs/` | 基线对比、仓库对比、软件清单等分析文档；`config-snapshot-ec73307.txt` 是另一项目（带 PON feeds）的 `.config` 快照，仅作参考 |
 
 ## 上游与刷机
 
