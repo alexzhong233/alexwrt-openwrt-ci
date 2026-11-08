@@ -42,8 +42,9 @@ CONFIG_PACKAGE_docker-compose=y
 CONFIG_PACKAGE_luci-app-passwall=y
 CONFIG_PACKAGE_luci-app-openclash=y
 # 设置向导与 vantage（对照 577090447/ax6600.emmc 的 GENERAL.txt）
-CONFIG_PACKAGE_luci-app-netwizard=y
-CONFIG_PACKAGE_luci-i18n-netwizard-zh-cn=y
+# netwizard 只编译不预装：=m 会把包编出来但不进镜像。
+CONFIG_PACKAGE_luci-app-netwizard=m
+CONFIG_PACKAGE_luci-i18n-netwizard-zh-cn=m
 CONFIG_PACKAGE_luci-app-vantage=y
 CONFIG_PACKAGE_luci-i18n-vantage-zh-cn=y
 CONFIG_PACKAGE_luci-app-athena-led=y
@@ -78,5 +79,6 @@ CONFIG_PACKAGE_luci-app-ttyd=y
 CONFIG_PACKAGE_luci-app-uugamebooster=y
 CONFIG_PACKAGE_vlmcsd=y
 CONFIG_PACKAGE_luci-app-vlmcsd=y
-CONFIG_PACKAGE_workbuddy2api=y
-CONFIG_PACKAGE_luci-app-workbuddy2api=y
+# WorkBuddy2API 只编译不预装。界面包已移到 backup/luci-app-workbuddy2api，
+# 不再进构建树，所以这里也没有 luci-app-workbuddy2api 的开关了。
+CONFIG_PACKAGE_workbuddy2api=m

@@ -1,8 +1,11 @@
-# 备份：已从固件移除的 NetBird 辅助脚本
+# 备份：已从固件移除的东西
 
-这里的文件曾经通过 `Files/RE-CS-02/` 打进固件，2026-11-08 起全部移出。目录结构保持原样，方便对照路径或整段恢复。
+这里的文件曾经被编进固件，现在全部移出。目录结构保持原样，方便对照路径或整段恢复。
 
-`Files/RE-CS-02/` 是构建时唯一被拷进固件的目录，所以放在仓库根 `backup/` 下的这些文件不会被编进固件。
+`Files/RE-CS-02/` 是构建时唯一被拷进固件的目录；`LuCI/` 下的子目录会被 `Scripts/prepare-workbuddy2api.sh` 拷进构建树。放在仓库根 `backup/` 下的内容两者都不会碰，所以不会被编进固件。
+
+- `netbird-legacy/` —— NetBird 的旧辅助脚本，见下文。
+- `luci-app-workbuddy2api/` —— 自建的 WorkBuddy2API 管理页面，见文末。
 
 ## 为什么移除
 
@@ -46,4 +49,24 @@ git mv backup/netbird-legacy/usr/bin/netbird-dns-guard.sh \
 cp -f /usr/libexec/netbird-real /usr/bin/netbird && chmod 755 /usr/bin/netbird
 rm -f /usr/libexec/netbird-real
 netbird status
+```
+
+## luci-app-workbuddy2api（2026-11-08 移入）
+
+自建的 WorkBuddy2API 管理页（“服务 -> WorkBuddy2API”，JS 版 LuCI：`htdocs/luci-static/resources/view/` + `menu.d` + `acl.d`）。2026-11-08 起 WorkBuddy2API 改为**只编译不预装**（`CONFIG_PACKAGE_workbuddy2api=m`），界面随之移出构建树。
+
+注意两点：
+
+1. `Scripts/prepare-workbuddy2api.sh` 会遍历 `LuCI/*/` 全部拷进构建树，这个目录一旦放回去就会自动被编进去，**不需要改脚本**；但必须同时在 `Config/IPQ60XX-NIUBIALEX-WIFI-YES.txt` 里加回：
+
+   ```sh
+   CONFIG_PACKAGE_luci-app-workbuddy2api=y
+   ```
+
+2. 界面依赖 `/etc/config/workbuddy2api` 和 `/etc/init.d/workbuddy2api`，这两个都随 `workbuddy2api` 本体包走。只装界面不装本体，页面上的操作会全部失败。
+
+恢复命令：
+
+```sh
+git mv backup/luci-app-workbuddy2api LuCI/luci-app-workbuddy2api
 ```
