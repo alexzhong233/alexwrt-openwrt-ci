@@ -34,15 +34,69 @@ is_enabled() {
 	return 1
 }
 
+# 命令行里同时包含所有给定关键字的进程数。
+# 不能退回 `ps w | grep -c`：ps 输出里任何一行出现该关键字都会被算进去，
+# 而这里要找的是"netbird 且 service run"这种两段式匹配。
 proc_count() {
-	local n
-	n=$(ps w 2>/dev/null | grep -v grep | grep -c "$1" 2>/dev/null)
-	[ -n "$n" ] || n=0
+	local entry pid cmd ok pat n
+
+	n=0
+	for entry in /proc/[0-9]*/cmdline; do
+		[ -r "$entry" ] || continue
+		pid="${entry#/proc/}"
+		pid="${pid%/cmdline}"
+		[ "$pid" = "$$" ] && continue
+		cmd=$(tr '\0' ' ' <"$entry" 2>/dev/null)
+		ok=1
+		for pat in "$@"; do
+			case "$cmd" in
+			*"$pat"*) ;;
+			*)
+				ok=0
+				break
+				;;
+			esac
+		done
+		[ "$ok" = 1 ] && n=$((n + 1))
+	done
+	printf '%s' "$n"
+}
+
+# 守护脚本的"实例"个数。
+#
+# watcher 会 fork 两个不 exec 的子 shell（看门狗、读 nft monitor 的那个），
+# fork 不 exec 时 cmdline 原样继承，于是 ps 里有三行一模一样的
+# `/bin/sh /usr/bin/netbird-passwall-compat-watch.sh`。按字符串计数就会把
+# 一个正常实例报成三个，页面据此显示"存在遗留进程"。
+#
+# 这里扫 /proc 并跳过"父进程也跑着同一脚本"的进程，剩下的才是真正独立的实例。
+watch_instances() {
+	local entry pid cmd ppid pcmd n
+
+	n=0
+	for entry in /proc/[0-9]*/cmdline; do
+		[ -r "$entry" ] || continue
+		pid="${entry#/proc/}"
+		pid="${pid%/cmdline}"
+		cmd=$(tr '\0' ' ' <"$entry" 2>/dev/null)
+		case "$cmd" in
+		*"$WATCH_BIN"*) ;;
+		*) continue ;;
+		esac
+		ppid=$(sed -n 's/^PPid:[[:space:]]*//p' "/proc/$pid/status" 2>/dev/null)
+		if [ -n "${ppid:-}" ] && [ -r "/proc/$ppid/cmdline" ]; then
+			pcmd=$(tr '\0' ' ' <"/proc/$ppid/cmdline" 2>/dev/null)
+			case "$pcmd" in
+			*"$WATCH_BIN"*) continue ;;
+			esac
+		fi
+		n=$((n + 1))
+	done
 	printf '%s' "$n"
 }
 
 is_running() {
-	[ "$(proc_count "$1")" -gt 0 ]
+	[ "$(proc_count "$@")" -gt 0 ]
 }
 
 if_status() {
@@ -71,13 +125,16 @@ EOF
 
 do_status() {
 	local mode watchdog wt0 wt0_rules compat_rules state ip networks nb
-	local nb_en nb_run w_en
+	local nb_en nb_run w_en w_inst w_procs w_state
 
 	mode=$(get_opt mode off)
 	watchdog=$(get_opt watchdog 60)
 
 	if is_enabled netbird; then nb_en=1; else nb_en=0; fi
-	if is_running "/usr/libexec/netbird-real service run" || is_running "netbird"; then
+	# 只认"netbird 且 service run"的进程。/usr/libexec/netbird-real service run
+	# 和 /usr/sbin/netbird service run 都能命中；关键字 netbird 单独用会误判，
+	# 因为 netbird-passwall-compat*.sh 这些脚本名里也带 netbird。
+	if is_running netbird "service run"; then
 		nb_run=1
 	else
 		nb_run=0
@@ -97,6 +154,23 @@ do_status() {
 
 	if is_enabled "$WATCH_SVC"; then w_en=1; else w_en=0; fi
 
+	w_inst=$(watch_instances)
+	w_procs=$(proc_count "$WATCH_BIN")
+
+	# 守护实例 0 个 = 没跑；1 个且模式是 watch = 正常；1 个但模式已 off =
+	# 上个固件留下的实例（procd 不会自己停它）；多于 1 个才是真的遗留进程。
+	case "$w_inst" in
+	0) w_state=off ;;
+	1)
+		if [ "$mode" = "watch" ]; then
+			w_state=ok
+		else
+			w_state=orphan
+		fi
+		;;
+	*) w_state=stray ;;
+	esac
+
 	cat <<EOF
 mode=$mode
 watchdog=$watchdog
@@ -106,7 +180,9 @@ netbird_state=${state:-unknown}
 netbird_ip=${ip:-}
 networks=${networks:-}
 watch_enabled=$w_en
-watch_running=$(proc_count "$WATCH_BIN")
+watch_state=$w_state
+watch_running=$w_inst
+watch_procs=$w_procs
 wt0=$wt0
 wt0_rules=$wt0_rules
 compat_rules=$compat_rules

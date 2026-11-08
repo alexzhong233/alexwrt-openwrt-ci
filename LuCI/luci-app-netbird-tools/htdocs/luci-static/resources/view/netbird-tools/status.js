@@ -49,8 +49,32 @@ return view.extend({
 
 	buildRows: function(st) {
 		var running = parseInt(st.watch_running || '0', 10);
+		var procs = parseInt(st.watch_procs || String(running), 10);
+		var wstate = st.watch_state || (running === 0 ? 'off' : (running > 1 ? 'stray' : 'ok'));
 		var wt0Rules = parseInt(st.wt0_rules || '0', 10);
 		var compatRules = parseInt(st.compat_rules || '0', 10);
+
+		/* 守护脚本会 fork 出看门狗和读 nft monitor 的子 shell，命令行与主进程
+		 * 一模一样，按字符串数进程会把一个正常实例数成三个。后端已经按父子关系
+		 * 排除掉子 shell，这里只显示独立实例数，子 shell 的数量单独标注。 */
+		var watchText, watchOk;
+
+		if (wstate === 'ok') {
+			watchOk = true;
+			watchText = _('运行中（1 个实例）');
+		} else if (wstate === 'orphan') {
+			watchOk = false;
+			watchText = _('1 个，但模式是 off');
+		} else if (wstate === 'stray') {
+			watchOk = false;
+			watchText = running + ' ' + _('个实例，存在遗留进程');
+		} else {
+			watchOk = true;
+			watchText = _('未运行');
+		}
+
+		if (procs > running)
+			watchText += ' · ' + _('子进程') + ' ' + (procs - running);
 
 		function row(label, value) {
 			return E('tr', { 'class': 'tr' }, [
@@ -75,9 +99,7 @@ return view.extend({
 			row(_('兼容守护模式'), plain(st.mode === 'watch'
 				? _('watch（事件驱动）')
 				: _('off（关闭，推荐保持）'))),
-			row(_('守护进程数'), badge(running <= 1,
-				running > 0 ? String(running) : _('0，未运行'),
-				running + ' ' + _('个，存在遗留进程'))),
+			row(_('守护实例'), badge(watchOk, watchText, watchText)),
 			row(_('兼容规则条数'), badge(compatRules > 0,
 				String(compatRules), _('0')))
 		];
