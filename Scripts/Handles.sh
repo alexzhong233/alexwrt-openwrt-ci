@@ -296,3 +296,41 @@ if [ -f "$ATHENA_IMAGE_MK" ]; then
 	fi
 fi
 
+#雅典娜屏控的「运行状态」永远显示 NOT RUNNING
+#
+#页面的 getServiceStatus() 第 19 行读 /var/run/athena-led.pid，包里的
+#root/usr/share/rpcd/acl.d/luci-app-athena-led.json 也只授这一个路径。
+#但 OpenWrt 上 /var 是指向 /tmp 的符号链接，rpcd 的 file 插件在 ACL 通过后
+#还会 realpath() 一次，路径一变就用解引用后的路径重新校验
+#（rpcd/file.c 的 rpc_check_symlink_access()），/tmp/run/athena-led.pid
+#匹配不到白名单就被拒，前端 catch 成「未运行」。
+#
+#上游 main（2.5.0）和 v2.4.0 都是这么写的，两个 tag 在这点上完全一样，
+#所以不是版本问题，就是包本身没考虑 /var 是符号链接。把两条路径都授 read，
+#页面一行都不用改。
+ACL_ATHENA="$PACKAGE_PATH/luci-app-athena-led/root/usr/share/rpcd/acl.d/luci-app-athena-led.json"
+if [ -f "$ACL_ATHENA" ] && ! grep -q '/tmp/run/athena-led.pid' "$ACL_ATHENA"; then
+	echo " "
+	python3 - "$ACL_ATHENA" <<'PY'
+import json, sys
+
+path = sys.argv[1]
+with open(path, encoding='utf-8') as fp:
+    doc = json.load(fp)
+
+for acl in doc.values():
+    files = acl.get('read', {}).get('file')
+    if isinstance(files, dict) and '/var/run/athena-led.pid' in files:
+        files['/tmp/run/athena-led.pid'] = files['/var/run/athena-led.pid']
+
+with open(path, 'w', encoding='utf-8') as fp:
+    json.dump(doc, fp, indent='\t', ensure_ascii=False)
+    fp.write('\n')
+PY
+	if grep -q '/tmp/run/athena-led.pid' "$ACL_ATHENA"; then
+		echo "athena-led ACL: /tmp/run/athena-led.pid read allowed"
+	else
+		echo "athena-led ACL: patch failed (json shape changed upstream?)"
+	fi
+fi
+
