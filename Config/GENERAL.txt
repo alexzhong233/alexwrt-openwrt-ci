@@ -88,6 +88,11 @@ CONFIG_PACKAGE_coremark=y
 CONFIG_PACKAGE_cpufreq=y
 CONFIG_PACKAGE_curl=y
 CONFIG_PACKAGE_dmesg=y
+# OpenClash / PassWall 改用官方 feeds 版后，两者 DEPENDS 里都不再带 dnsmasq-full
+# （以前是 vernesong 的 Package/config 块和上游 passwall 的 +dnsmasq-full 拉进来的）。
+# 少了它固件只剩基础 dnsmasq，PassWall 的 nftset / OpenClash 的 DNS 分流全部失效，
+# 而且不会有任何构建报错，所以必须显式装。dnsmasq_full_nftset 默认 y，不用另外写。
+CONFIG_PACKAGE_dnsmasq-full=y
 CONFIG_PACKAGE_exfat-fsck=y
 CONFIG_PACKAGE_exfat-mkfs=y
 CONFIG_PACKAGE_fdisk=y

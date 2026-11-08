@@ -171,8 +171,19 @@ UPDATE_PACKAGE "vantage" "anothaDev/luci-theme-vantage" "main"
 
 UPDATE_PACKAGE "momo" "nikkinikki-org/OpenWrt-momo" "main"
 UPDATE_PACKAGE "nikki" "nikkinikki-org/OpenWrt-nikki" "main"
-UPDATE_PACKAGE "openclash" "vernesong/OpenClash" "master" "pkg"
-UPDATE_PACKAGE "passwall" "Openwrt-Passwall/openwrt-passwall" "main" "pkg"
+# OpenClash 和 PassWall 走官方 feeds（luci feed），不再从作者仓库 clone。
+#
+# 两个来源的内容基本一致，官方 feed 反而更规整：
+#   · OpenClash：vernesong 最后一次提交 v0.48.002（2026-10-11），immortalwrt/luci
+#     在 2026-10-20 同步了同一版本。忽略 CRLF 后两者只差 6 个文件，其中 Makefile
+#     那处是官方版修好了 vernesong 版的三处 $ 转义错误（`$(pidof clash)` 少一个 $，
+#     在 recipe 里会被 make 展开成空串，postinst 的 stop 判断实际失效）。
+#   · PassWall：官方 feed 是 26.11.3，上游 main 只是多几天的小修。差别在打包方式：
+#     官方版把透明代理固定成 nftables（去掉 Iptables/Nftables 开关）、去掉
+#     SSR-libev 客户端、用 geoview 替代 v2ray-geoip/geosite 两个大包。代价是
+#     官方版 DEPENDS 里没有 dnsmasq-full，必须由 Config 显式安装（见 GENERAL.txt）。
+#
+# 少 clone 两个仓库，也少一份"上游改结构、脚本静默失效"的风险。
 UPDATE_PACKAGE "passwall2" "Openwrt-Passwall/openwrt-passwall2" "main" "pkg"
 UPDATE_PACKAGE "dockerman" "lisaac/luci-app-dockerman" "master"
 # firewall4/APK 对版本字段按 SemVer 校验，不接受 Dockerman Makefile 当前的
@@ -355,7 +366,17 @@ UPDATE_PACKAGE "mosdns" "sbwml/luci-app-mosdns" "v5" "" "v2dat"
 UPDATE_PACKAGE "qbittorrent" "sbwml/luci-app-qbittorrent" "master" "" "qt6base qt6tools rblibtorrent"
 UPDATE_PACKAGE "uugamebooster" "xiaodoudou/luci-app-uugamebooster" "master" "pkg"
 UPDATE_PACKAGE "quickfile" "sbwml/luci-app-quickfile" "main"
-UPDATE_PACKAGE "openlist2" "sbwml/luci-app-openlist2" "main"
+# OpenList 用官方 feeds 的 openlist + luci-app-openlist（immortalwrt/packages 维护，
+# Tianling Shen）。sbwml 的 luci-app-openlist2 就是同一个项目改名（2025-07-18
+# "repo: rename to openlist2"），编的是同一份 OpenList 源码、同一个 tarball，
+# 差别只在开官方包：前端用 dist（完整）而不是 dist-lite。
+#
+# 换包需要迁移的东西（新包不会自动搬，官方 99-migrate-openlist 只认 alist）：
+#   · 二进制   /usr/bin/openlist2        -> /usr/bin/openlist
+#   · UCI 段   /etc/config/openlist2     -> /etc/config/openlist（字段名也变了，
+#              port -> listen_http_port，data_dir 没有对应项，官方写死 /etc/openlist）
+#   · 数据     /etc/openlist2/data.db    -> /etc/openlist/data.db
+# 数据的搬迁由 Files/RE-CS-02/etc/uci-defaults/95-niubialex-openlist-migrate 负责。
 
 # 当前路由器使用的 SysTools 来自 LinkEase 应用扩展仓库。
 UPDATE_PACKAGE "systools" "linkease/openwrt-app-actions" "main" "pkg"
@@ -406,6 +427,24 @@ UPDATE_PACKAGE "mt5700" "LianXia233/luci-app-mt5700" "main"
 UPDATE_PACKAGE "mt5700m" "LianXia233/luci-app-mt5700m" "main"
 UPDATE_PACKAGE "netmonitor" "LianXia233/luci-app-netmonitor" "main"
 UPDATE_PACKAGE "qmodem-generic" "LianXia233/luci-app-qmodem-generic" "main"
+
+# 改用官方 feeds 的四个包（openclash / passwall / openlist / luci-app-openlist）。
+#
+# 它们不在上面的自建包清单里，所以 WRT-CORE 的 "Verify Package Selection" 只会
+# 报 warning 而不会失败；feeds update/install 出问题时，make defconfig 会静默
+# 丢掉对应的 CONFIG_PACKAGE_* 行，最后产出一个"构建成功但少了代理页/网盘页"的
+# 固件。这里显式检查一次，缺了就中断。
+for FEED_PKG in luci-app-openclash luci-app-passwall luci-app-openlist openlist; do
+	FOUND=""
+	for FEED_DIR in ./package/feeds/luci ./package/feeds/packages; do
+		[ -e "$FEED_DIR/$FEED_PKG" ] && FOUND=1
+	done
+	if [ -z "$FOUND" ]; then
+		echo "::error::$FEED_PKG 不在 feeds 里（feeds update/install 可能失败），官方包方案无法继续" >&2
+		exit 1
+	fi
+done
+echo "feeds packages present: openclash / passwall / openlist"
 
 #引入私有扩展脚本
 if [ -f "$GITHUB_WORKSPACE/Scripts/PRIVATE.sh" ]; then

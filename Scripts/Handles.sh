@@ -6,6 +6,20 @@ FEEDS_PATH="./feeds"
 PACKAGE_PATH="./package"
 TARGET_PATH="./target"
 
+#包目录解析：自建包克隆在 ./package/<name>，改用官方 feeds 的包在
+#./package/feeds/<feed>/<name>（feeds install 生成的软链）。同一个包只会在其中
+#一处，按顺序找，找不到返回空串（调用方用 -f / -d 判断即可）。
+PKG_DIR() {
+	local NAME=$1 D
+	for D in "$PACKAGE_PATH/$NAME" "$PACKAGE_PATH/feeds/luci/$NAME" "$PACKAGE_PATH/feeds/packages/$NAME"; do
+		if [ -d "$D" ]; then
+			printf '%s' "$D"
+			return 0
+		fi
+	done
+	return 1
+}
+
 #修补命令统一入口：FIX <名称> <守卫目录> <命令...>
 #守卫目录不存在时直接跳过，保证在 bash -e 下不中断
 FIX() {
@@ -66,8 +80,11 @@ RELOCATE_MENU() {
 
 RELOCATE_MENU "netbird" "$PACKAGE_PATH/luci-app-netbird" \
 	"admin/services/netbird" "admin/vpn/netbird"
-RELOCATE_MENU "openlist2" "$PACKAGE_PATH/luci-app-openlist2" \
-	"admin/services/openlist2" "admin/nas/openlist2"
+#openlist 换成官方 feeds 版（原 sbwml 的 luci-app-openlist2），菜单键从
+#admin/services/openlist 搬到「NAS」；父键是子键前缀，一次替换覆盖两页。
+OPENLIST_DIR=$(PKG_DIR luci-app-openlist) || OPENLIST_DIR=""
+RELOCATE_MENU "openlist" "$OPENLIST_DIR" \
+	"admin/services/openlist" "admin/nas/openlist"
 RELOCATE_MENU "qbittorrent" "$PACKAGE_PATH/luci-app-qbittorrent" \
 	"admin/services/qbittorrent" "admin/nas/qbittorrent"
 #雅典娜屏控：上游放在「服务」里，这台机器上它属于系统级调参
@@ -79,7 +96,10 @@ RELOCATE_MENU "natmapt" "$PACKAGE_PATH/luci-app-natmapt" \
 	"admin/services/natmap" "admin/network/natmap"
 
 #VPN 三个 Lua 界面：passwall / openclash / uu 加速器
-PASSWALL_CTRL="$PACKAGE_PATH/luci-app-passwall/luasrc/controller/passwall.lua"
+#passwall 和 openclash 现在来自官方 luci feed，路径经 PKG_DIR 解析；官方版的
+#controller 里仍是 entry({"admin", "services", ...})，替换规则和以前一样。
+PASSWALL_DIR=$(PKG_DIR luci-app-passwall) || PASSWALL_DIR=""
+PASSWALL_CTRL="$PASSWALL_DIR/luasrc/controller/passwall.lua"
 if [ -f "$PASSWALL_CTRL" ]; then
 	echo " "
 	if sed -i 's#"admin", "services", appname#"admin", "vpn", appname#g' "$PASSWALL_CTRL"; then
@@ -87,7 +107,8 @@ if [ -f "$PASSWALL_CTRL" ]; then
 	fi
 fi
 
-OPENCLASH_CTRL="$PACKAGE_PATH/luci-app-openclash/luasrc/controller/openclash.lua"
+OPENCLASH_DIR=$(PKG_DIR luci-app-openclash) || OPENCLASH_DIR=""
+OPENCLASH_CTRL="$OPENCLASH_DIR/luasrc/controller/openclash.lua"
 if [ -f "$OPENCLASH_CTRL" ]; then
 	echo " "
 	if sed -i 's#"admin", "services", "openclash"#"admin", "vpn", "openclash"#g' "$OPENCLASH_CTRL"; then

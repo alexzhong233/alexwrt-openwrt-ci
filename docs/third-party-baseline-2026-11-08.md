@@ -7,6 +7,11 @@
 再比对「配置分支的 HEAD SHA」与「按 `sort -V` 取到的最新 tag 的 SHA」。
 不使用 GitHub API（未认证配额 60 次/小时，49 个仓库一轮就会打满）。
 
+> **同日变更**：`vernesong/OpenClash`、`Openwrt-Passwall/openwrt-passwall`、
+> `sbwml/luci-app-openlist2` 三个仓库已停止引用，对应插件改走官方 feeds
+> （`luci-app-openclash` / `luci-app-passwall` / `openlist` + `luci-app-openlist`）。
+> 下表中这三行的数据只作历史快照，当前实际引用的第三方仓库为 46 个。
+
 ## 汇总
 
 | 分类 | 仓库数 | 含义 |

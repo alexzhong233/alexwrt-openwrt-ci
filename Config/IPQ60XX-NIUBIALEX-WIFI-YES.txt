@@ -57,9 +57,11 @@ CONFIG_PACKAGE_athena-led=y
 # 这里不选 luci-i18n-athena-led-zh-cn：2.5.0 版界面用 package.mk 打包，不拆
 # 独立 i18n 包，中文 lmo 由它自己的 install 段直接装进 /usr/lib/lua/luci/i18n。
 CONFIG_PACKAGE_luci-app-harbor-file=y
-CONFIG_PACKAGE_openlist2=y
-CONFIG_PACKAGE_luci-app-openlist2=y
-CONFIG_PACKAGE_luci-i18n-openlist2-zh-cn=y
+# OpenList 走官方 feeds 版（原 sbwml 的 openlist2 是同一项目改名）。
+# 官方包 PROVIDES:=alist，菜单在「NAS」，数据目录 /etc/openlist。
+CONFIG_PACKAGE_openlist=y
+CONFIG_PACKAGE_luci-app-openlist=y
+CONFIG_PACKAGE_luci-i18n-openlist-zh-cn=y
 CONFIG_PACKAGE_luci-app-diskman=y
 CONFIG_PACKAGE_qbittorrent=y
 CONFIG_PACKAGE_luci-app-qbittorrent=y
