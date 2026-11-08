@@ -20,15 +20,13 @@ CONFIG_PACKAGE_luci-i18n-oaf-zh-cn=y
 # CONFIG_ATH11K_NSS_WIFI 必须为 y：它决定 /usr/share/nss-wifi/wlan 的内容是 1，
 # 少了这行，启动脚本会认为本机没有可卸载的 WiFi，直接退回 host path。
 #
-# 固件线 12.5：上游 package/qca-nss/nss-firmware/Makefile 的 choice 里
-# `default NSS_FIRMWARE_VERSION_12_5`，不写这行也是 12.5；显式写出来只是把
-# 默认值钉死，避免上游哪天改默认、或有人误勾 11_4。两条线的差别只有 802.11s：
-# 12.5 的 help 原文是 "Does not accept an 802.11s mesh interface"，11_4 是
-# "the last firmware line with 802.11s mesh support"。要跑 802.11s 回程才换 11_4。
+# 固件线不在这里钉版本：上游 nss-firmware 的 choice 默认就是 12.5
+# （`default NSS_FIRMWARE_VERSION_12_5`，另有 `NSS_LINE:=$(if ...11_4,11.4,12.5)`），
+# 显式写死只会挡住上游将来改默认，所以跟着上游走。两条线唯一的差别是 802.11s：
+# 12.5 不接受 802.11s mesh 接口，11_4 是最后一条支持的线；要跑 802.11s 再手动选。
 CONFIG_PACKAGE_nss-firmware=y
 CONFIG_PACKAGE_kmod-nss-wifi-drv=y
 CONFIG_ATH11K_NSS_WIFI=y
-CONFIG_NSS_FIRMWARE_VERSION_12_5=y
 # 自建的 NSS 状态页：读 nss-wifi-drv 的 debugfs（wifili_rx / flows / log），
 # 显示每个 vdev 的收字节、丢弃、Ring 满，以及挂在硬件表上的客户端数。
 # 包本体在 LuCI/luci-app-nss-status，由 Scripts/prepare-luci-packages.sh 拷进构建树。
