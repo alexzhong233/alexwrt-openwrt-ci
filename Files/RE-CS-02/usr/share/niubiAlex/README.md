@@ -31,9 +31,9 @@ config netbird 'compat'
 默认 `off`，什么都不会跑。切换方式：
 
 ```sh
-/usr/bin/niubialex-netbird mode watch   # 启用事件驱动守护
-/usr/bin/niubialex-netbird mode off     # 关掉
-/usr/bin/niubialex-netbird watchdog 60  # 兜底间隔
+/usr/bin/netbird-compat-ctl mode watch   # 启用事件驱动守护
+/usr/bin/netbird-compat-ctl mode off     # 关掉
+/usr/bin/netbird-compat-ctl watchdog 60  # 兜底间隔
 ```
 
 LuCI 里对应「服务 → NetBird 工具」，能在同一页看到 wt0 转发规则是否还在、守护进程有没有遗留、当前模式和兼容规则条数，也能手动补一次规则、重建 wt0 转发、看日志。

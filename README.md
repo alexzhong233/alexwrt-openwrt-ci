@@ -75,10 +75,10 @@
 改规则的实现放在 `/usr/bin/netbird-passwall-compat.sh`，由守护以 `--once` 调用，也可以手动单次执行；它不再单独注册 procd 服务——早先的轮询服务与事件守护共用同一把补丁锁，同时开等于互相抵消，已移除。
 
 ```sh
-/usr/bin/niubialex-netbird status        # 当前模式、进程数、wt0 规则数
-/usr/bin/niubialex-netbird mode watch    # 启用事件守护
-/usr/bin/niubialex-netbird mode off      # 关闭（默认）
-/usr/bin/niubialex-netbird watchdog 60   # 兜底间隔，0 关闭
+/usr/bin/netbird-compat-ctl status        # 当前模式、进程数、wt0 规则数
+/usr/bin/netbird-compat-ctl mode watch    # 启用事件守护
+/usr/bin/netbird-compat-ctl mode off      # 关闭（默认）
+/usr/bin/netbird-compat-ctl watchdog 60   # 兜底间隔，0 关闭
 ```
 
 LuCI 里是「服务 → NetBird 工具」，能看状态、切模式、立即补一次规则、重建 wt0 转发、查日志。

@@ -33,8 +33,8 @@ meta mark <PassWall 当前 mark> return
 固件里唯一的常驻方式，由 `/etc/config/niubialex` 控制，默认关闭：
 
 ```sh
-/usr/bin/niubialex-netbird mode watch   # 启用
-/usr/bin/niubialex-netbird mode off     # 关闭
+/usr/bin/netbird-compat-ctl mode watch   # 启用
+/usr/bin/netbird-compat-ctl mode off     # 关闭
 ```
 
 也可以直接在 LuCI「服务 → NetBird 工具」切换。**不要**用 `/etc/init.d/netbird-passwall-compat-watch enable` 绕过开关——服务启动时会检查 `mode`，不匹配就直接返回，等于白配一个开机项。
@@ -42,8 +42,8 @@ meta mark <PassWall 当前 mark> return
 netlink 事件在接收缓冲溢出（ENOBUFS）时会被静默丢弃，所以默认保留 60 秒兜底检查。调整用 `watchdog`：
 
 ```sh
-/usr/bin/niubialex-netbird watchdog 120   # 放宽
-/usr/bin/niubialex-netbird watchdog 0     # 关闭兜底
+/usr/bin/netbird-compat-ctl watchdog 120   # 放宽
+/usr/bin/netbird-compat-ctl watchdog 0     # 关闭兜底
 ```
 
 启用前先测事件延迟：
@@ -62,8 +62,8 @@ netlink 事件在接收缓冲溢出（ENOBUFS）时会被静默丢弃，所以�
 ## 常用命令
 
 ```sh
-/usr/bin/niubialex-netbird status
-/usr/bin/niubialex-netbird mode watch
+/usr/bin/netbird-compat-ctl status
+/usr/bin/netbird-compat-ctl mode watch
 /usr/bin/netbird-passwall-compat.sh --once
 /usr/bin/export-router-state.sh /tmp/router-export-before-upgrade
 ```

@@ -4,7 +4,7 @@
 'require ui';
 'require poll';
 
-var TOOL = '/usr/bin/niubialex-netbird';
+var TOOL = '/usr/bin/netbird-compat-ctl';
 
 function call(args) {
 	return fs.exec(TOOL, args).then(function(res) {
@@ -114,7 +114,7 @@ return view.extend({
 			setOut(_('正在执行：') + label + ' ...');
 
 			return call(args).then(function(res) {
-				setOut('$ niubialex-netbird ' + args.join(' ') + '\n\n' + (res.text || _('（无输出）')));
+				setOut('$ netbird-compat-ctl ' + args.join(' ') + '\n\n' + (res.text || _('（无输出）')));
 				return refresh();
 			});
 		}
