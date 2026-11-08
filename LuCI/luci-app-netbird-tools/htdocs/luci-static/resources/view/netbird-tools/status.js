@@ -152,7 +152,7 @@ return view.extend({
 
 		poll.add(function() {
 			return refresh();
-		}, 5);
+		}, 10);
 
 		return E('div', {}, [
 			E('h2', {}, [ _('NetBird 工具') ]),

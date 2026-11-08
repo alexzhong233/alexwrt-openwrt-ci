@@ -56,7 +56,7 @@ get_opt() {
 }
 
 do_status() {
-	local mode watchdog interval wt0 wt0_rules compat_rules state ip networks
+	local mode watchdog interval wt0 wt0_rules compat_rules state ip networks nb
 
 	mode=$(get_opt mode off)
 	watchdog=$(get_opt watchdog 60)
@@ -69,10 +69,13 @@ do_status() {
 		nb_run=0
 	fi
 
-	state=$(netbird status 2>/dev/null | sed -n 's/^Management: *//p' | head -n1)
-	ip=$(netbird status 2>/dev/null | sed -n 's/^NetBird IP: *//p' | head -n1)
+	# netbird CLI 每次都走一次 unix socket，页面每 5 秒刷新一次，
+	# 分开调三次等于一分钟几十次往返。只取一次再解析。
+	nb=$(netbird status 2>/dev/null)
+	state=$(printf '%s\n' "$nb" | sed -n 's/^Management: *//p' | head -n1)
+	ip=$(printf '%s\n' "$nb" | sed -n 's/^NetBird IP: *//p' | head -n1)
 	ip=${ip%%/*}
-	networks=$(netbird status 2>/dev/null | sed -n 's/^Networks: *//p' | head -n1)
+	networks=$(printf '%s\n' "$nb" | sed -n 's/^Networks: *//p' | head -n1)
 
 	if if_status wt0; then wt0=1; else wt0=0; fi
 	wt0_rules=$(nft list chain inet fw4 forward 2>/dev/null | grep -c 'wt0')
