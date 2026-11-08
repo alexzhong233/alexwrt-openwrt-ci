@@ -4,27 +4,27 @@
 
 | 仓库 | 角色 |
 |---|---|
-| `VIKINGYFY/OpenWRT-CI` | 你 fork 的**基线**。整套 CI 框架（WRT-CORE、Scripts、Config）来自这里 |
+| `VIKINGYFY/OpenWRT-CI` | 本仓库 fork 的**基线**。整套 CI 框架（WRT-CORE、Scripts、Config）来自这里 |
 | `577090447/IPQ60XX-WIFI-YES` | 别人的**精简版**同款框架，只编 IPQ60XX 单机型 |
 | `577090447/ax6600.emmc` | 上一项的**加料版**，多了 `files/` 目录把整机配置烤进固件 |
-| `alexzhong233/alexwrt-openwrt-ci` | 你的**应用型**固件，针对京东云雅典娜 RE-CS-02 |
+| `alexzhong233/alexwrt-openwrt-ci` | 本仓库的**应用型**固件，针对京东云雅典娜 RE-CS-02 |
 
-一句话结论：四者是**同一套框架的三个分支**——上游是"一次编一整排机型"的平台包，577090447 是"只编我这台"，你是"只编我这台 + 塞满应用 + 注入定制脚本"。
+一句话结论：四者是**同一套框架的三个分支**——上游是"一次编一整排机型"的平台包，577090447 是"只编我这台"，本仓库是"只编这一台 + 塞满应用 + 注入定制脚本"。
 
 ---
 
 ## 1. 仓库结构对比
 
-| 维度 | VIKINGYFY 上游 | 577090447/IPQ60XX | 577090447/ax6600.emmc | 你的 alexwrt |
+| 维度 | VIKINGYFY 上游 | 577090447/IPQ60XX | 577090447/ax6600.emmc | alexwrt |
 |---|---|---|---|---|
 | 工作流数量 | 10 个（AIROHA/MTK/OWRT/QCA/QCB/WRT-CORE/WRT-TEST/Auto-Clean/Cache-Clean） | 6 个 | 3 个（QCA-ALL/WRT-CORE/WRT-TEST） | 10 个 + 自建 `ALEXWRT.yml` |
 | Config 数量 | 15 个（覆盖全平台） | 3 个（GENERAL/IPQ60XX-WIFI-YES/TEST） | 8 个 | 15 个（上游全部 + `IPQ60XX-ALEXWRT-WIFI-YES`；原 `-OVERRIDES` 已并入该文件） |
 | `files/` 注入目录 | 无 | 无 | **有**（5 个文件） | **有**（`Files/RE-CS-02`，12 个文件） |
 | WRT-CORE 版本 | 最新（含 cache-rollover 缓存滚动） | 最新 | **较旧**（去掉了 cache-rollover，`WRT_TEST` 还是 string） | 最新 + 3 个新输入 |
 | 上游源码 | 自己提供 | `577090447/immortalwrt` `main` | 同左 | `VIKINGYFY/immortalwrt` `owrt` |
-| 自动触发 | 每天（Auto-Clean → QCA-ALL 链式） | 同左 | 同左 | 你自己加的 `cron: 0 22 * * *` + 手动 |
+| 自动触发 | 每天（Auto-Clean → QCA-ALL 链式） | 同左 | 同左 | 自建的 `cron: 0 22 * * *` + 手动 |
 
-你的仓库相对上游 `VIKINGYFY/OpenWRT-CI` 的真实改动（已逐文件 diff 核对）：
+本仓库相对上游 `VIKINGYFY/OpenWRT-CI` 的真实改动（已逐文件 diff 核对）：
 
 | 文件 | 改动量 | 内容 |
 |---|---|---|
@@ -46,13 +46,13 @@
 |---|---|
 | 上游 QCA-ALL（`IPQ60XX-WIFI-YES`） | **18 个** IPQ60XX 机型全选（360v6、AX18、AX5、AX1800、AX9000 系列……），一个平台包里塞一整排设备 |
 | 577090447 两个仓库 | 只启用 `jdcloud_re-cs-02`，其余 17 个全部 `=n` |
-| 你的 ALEXWRT | 只启用 `jdcloud_re-cs-02` |
+| ALEXWRT | 只启用 `jdcloud_re-cs-02` |
 
-这就是为什么上游 Release 正文写着"这是个平台固件包，内含多个设备"，而你的只出一个 `.bin`。
+这就是为什么上游 Release 正文写着"这是个平台固件包，内含多个设备"，而本仓库只出一个 `.bin`。
 
 ### 2.2 出厂默认值
 
-| 项目 | 上游 | 577090447/IPQ60XX | ax6600.emmc | 你的 |
+| 项目 | 上游 | 577090447/IPQ60XX | ax6600.emmc | alexwrt |
 |---|---|---|---|---|
 | 主题 | 按各 workflow 传参 | vantage | vantage | **aurora** |
 | 主机名 | 按传参 | OpenWRT | OpenWRT | **alexwrt** |
@@ -63,11 +63,11 @@
 | WiFi 设置方式 | sed 改 `mac80211.uc` | 同左 | **整份 `/etc/config/wireless` 覆盖** | **构建期补丁改 `mac80211.uc` 的 SSID / 国家码 / 信道 / htmode 兜底值** |
 | 软件源 | 上游默认 | 上游默认 | **换成 NJU 镜像 + iStore 源**（`files/etc/apk/repositories.d/distfeeds.list`） | 上游默认 + NJU 追加（`customfeeds.list`） |
 
-WiFi 这一行的实现差异值得注意：ax6600.emmc 是"静态覆盖"，好处是绝对可控，坏处是上游改了无线默认值你就跟不上了；当前方案是"构建期改生成器兜底值"，既能钉住 SSID / 国家码 / 信道 / htmode，又不会在开机后覆盖用户配置（`radio_exists()` 会跳过已存在的 radio）。
+WiFi 这一行的实现差异值得注意：ax6600.emmc 是"静态覆盖"，好处是绝对可控，坏处是上游改了无线默认值就跟不上了；当前方案是"构建期改生成器兜底值"，既能钉住 SSID / 国家码 / 信道 / htmode，又不会在开机后覆盖用户配置（`radio_exists()` 会跳过已存在的 radio）。
 
 ### 2.3 应用清单
 
-| 应用 | 上游 GENERAL | 577090447/IPQ60XX | 你的 |
+| 应用 | 上游 GENERAL | 577090447/IPQ60XX | alexwrt |
 |---|---|---|---|
 | HomeProxy | `=y` | `=n` | `=m`（可装不预装） |
 | OpenClash | 无 | `=y` | `=y` |
@@ -83,9 +83,9 @@ WiFi 这一行的实现差异值得注意：ax6600.emmc 是"静态覆盖"，好�
 | athena-led | 无 | **显式 `=n` 关掉** | `=y`（从 577090447 的 LED 控制器仓库提取） |
 | mini-diskmanager | `=y` | `=n`（改用 diskman） | `=n`（改用 diskman） |
 
-你的固件本质上是一台**小型 NAS + 旁路由**：Docker、1Panel、OpenList、qBittorrent、Harbor 全在里面，再叠 PassWall/OpenClash/NetBird 三套网络方案。上游和 577090447 的固件都是"干净路由"（577090447 带 Docker 但除此之外没有 NAS 应用栈），安装包体积会小很多，开机内存占用也低不少。
+本固件本质上是一台**小型 NAS + 旁路由**：Docker、1Panel、OpenList、qBittorrent、Harbor 全在里面，再叠 PassWall/OpenClash/NetBird 三套网络方案。上游和 577090447 的固件都是"干净路由"（577090447 带 Docker 但除此之外没有 NAS 应用栈），安装包体积会小很多，开机内存占用也低不少。
 
-### 2.4 你自己额外注入的东西
+### 2.4 额外注入的内容
 
 `Files/RE-CS-02` 里的 11 个文件是另外三个仓库都没有的：
 
@@ -103,9 +103,9 @@ WiFi 这一行的实现差异值得注意：ax6600.emmc 是"静态覆盖"，好�
 
 ---
 
-## 3. 为什么坑都踩在你这边
+## 3. 为什么坑都集中在自建包这边
 
-上游固件里**没有 Docker、没有 vlmcsd、没有 OpenAppFilter、没有 NetBird**（577090447 两个仓库的 `Config/GENERAL.txt` 都显式选了 `docker`/`dockerd`/`luci-app-dockerman`，`ax6600.emmc` 还带 `docker-compose`，所以它有 Docker；但它除 Docker 之外没有 NAS 应用栈）。你多引入的每一个自建包，都要自己保证它能过 `apk` 这一关：
+上游固件里**没有 Docker、没有 vlmcsd、没有 OpenAppFilter、没有 NetBird**（577090447 两个仓库的 `Config/GENERAL.txt` 都显式选了 `docker`/`dockerd`/`luci-app-dockerman`，`ax6600.emmc` 还带 `docker-compose`，所以它有 Docker；但它除 Docker 之外没有 NAS 应用栈）。多引入的每一个自建包，都要自己保证它能过 `apk` 这一关：
 
 | 已踩过的坑 | 现象 | 根因 |
 |---|---|---|

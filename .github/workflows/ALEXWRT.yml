@@ -33,7 +33,8 @@ jobs:
       WRT_CONFIG: IPQ60XX-ALEXWRT-WIFI-YES
       WRT_THEME: aurora
       WRT_NAME: alexWrt
-      # 无线不做定制：不传 SSID/密码，交给上游 mac80211 在首启时按硬件生成。
+      # 无线默认值（SSID / 密码 / 国家码 / 信道）不在这里传，由 Scripts/Handles.sh
+      # 于构建期打补丁改 mac80211.uc 的兜底值。
       WRT_IP: 192.168.88.1
       WRT_PW: 不设置，首次登录后自行设置
       # 上游用 VIKINGYFY/immortalwrt 的 owrt 分支。
@@ -47,7 +48,8 @@ jobs:
       # 它没有 wifili，WiFi 的包进 NSS 后只能走 exception 退回 CPU，所以状态页虽然
       # 有计数，无线本身并没有加速。此外它会去掉 qca-ppe-qos 和 luci-app-router-tool。
       #
-      # 家里现在以 WiFi 为主，将来有线玩游戏流量也小，CPU 软转发足够，故选 owrt。
+      # 这套上游是 WiFi 与有线都走软转发的常规方案，普通家用负载下 CPU 足够，
+      # 故选 owrt。
       WRT_REPO: https://github.com/VIKINGYFY/immortalwrt.git
       WRT_BRANCH: owrt
       WRT_SOURCE: VIKINGYFY/immortalwrt

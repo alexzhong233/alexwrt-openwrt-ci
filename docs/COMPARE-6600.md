@@ -37,4 +37,4 @@
 | NetBird DNS 默认行为 | 固件首次启动后，未显式指定时给 `netbird up` 加 `--disable-dns` | 没有这项定制 | niubiAlex 针对现有 DNS 冲突 |
 | NetBird/PassWall 脚本 | 动态发现 mark 和 nftables 链，附带可选服务 | 没有这套脚本 | niubiAlex 多故障处理 |
 
-当前最关键的实际差异是：6600 项目更接近“通用 IPQ60XX 构建”，保留 HomeProxy、mini-diskmanager 和易有云相关源码；niubiAlex 是针对你这台 RE-CS-02 的应用型固件，默认把 Docker、1Panel、NetBird、PassWall、OpenClash、OpenList、Harbor、qBittorrent、UU、KMS、NSS 和现有修复脚本放进去。
+当前最关键的实际差异是：6600 项目更接近“通用 IPQ60XX 构建”，保留 HomeProxy、mini-diskmanager 和易有云相关源码；alexwrt 是针对 RE-CS-02 的应用型固件，默认把 Docker、1Panel、NetBird、PassWall、OpenClash、OpenList、Harbor、qBittorrent、UU、KMS、NSS 和现有修复脚本放进去。

@@ -61,7 +61,7 @@ FIX "theme-vantage" "$PACKAGE_PATH/luci-theme-vantage" sed -i \
 #  set ${si}.key='${defaults?.key || '12345678'}'
 #这里替换 SSID 兜底值、国家码、信道和 HT 模式，加密与密码保持上游默认。
 #
-#取值来自设备实际备份（backup-alexWrt-2026-11-08 的 /etc/config/wireless）：
+#取值来自实机调试结果：
 #  radio1 2.4G  channel 5   HE40   （默认 20MHz 是被上游 width=20 写死的）
 #  radio0 5G    channel 161 HE80   SoC 内置 2x2
 #  radio2 5G    channel 36  HE160  PCIe 外挂 4x4

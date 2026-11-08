@@ -1,6 +1,6 @@
 # alexwrt 雅典娜 RE-CS-02 固件
 
-京东云雅典娜 `jdcloud_re-cs-02` 的个人 OpenWrt 构建，源码取自 `VIKINGYFY/immortalwrt` 的 `owrt` 分支。每天北京时间 06:17 自动编译，也可以在 Actions 页面手动运行。
+京东云雅典娜 `jdcloud_re-cs-02` 的 OpenWrt 构建，源码取自 `VIKINGYFY/immortalwrt` 的 `owrt` 分支。每天北京时间 06:17 自动编译，也可以在 Actions 页面手动运行。
 
 - 后台地址：`192.168.88.1`
 - root 密码：不预设，首次登录后自行设置

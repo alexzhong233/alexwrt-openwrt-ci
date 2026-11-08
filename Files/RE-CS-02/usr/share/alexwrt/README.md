@@ -1,10 +1,20 @@
 # alexwrt 雅典娜 RE-CS-02 固件
 
-这是针对京东云雅典娜 `jdcloud_re-cs-02` 的个人构建。默认后台地址为 `192.168.88.1`，不预设 LuCI 的 root 密码，首次登录后自行设置。
+这是针对京东云雅典娜 `jdcloud_re-cs-02` 的 OpenWrt 构建。默认后台地址为 `192.168.88.1`，不预设 LuCI 的 root 密码，首次登录后自行设置。
 
 ## Wi-Fi 默认值
 
-无线使用上游默认规则：首次启动时按硬件生成，SSID 为上游默认值，WPA2 密钥随机生成。用 `uci show wireless | grep -E 'ssid|key'` 查看，登录后建议在 LuCI 里自行修改；改过之后不会有任何脚本再覆盖。
+无线仍由上游规则在首次启动时按硬件生成，定制项只是兜底值：SSID、国家码、信道和频宽。
+
+| 频段 | 硬件 | 默认 SSID | 信道 | 频宽 |
+|---|---|---|---|---|
+| 2.4 GHz | SoC 内置 | `alexwrt-jdcloud-2.4g` | 5 | HE40 |
+| 5.2 GHz | PCIe 4×4 | `alexwrt-jdcloud-5.2g` | 36 | HE160 |
+| 5.8 GHz | SoC 内置 2×2 | `alexwrt-jdcloud-5.8g` | 161 | HE80 |
+
+国家码 `US`，加密 `psk2+ccmp`（WPA2-PSK），密码 `12345678`。用 `uci show wireless | grep -E 'ssid|key'` 查看，登录后建议在 LuCI 里自行修改；改过之后不会有任何脚本再覆盖。
+
+5.2 GHz 的 160MHz 落在 DFS 频段，首次启动或换信道时需要等一次约 60 秒的 CAC，属正常现象。2.4 GHz 的 HE40 若因邻居干扰被降成 HE20，也属 802.11 共存规则的正常降级。
 
 ## 固件内置内容
 
