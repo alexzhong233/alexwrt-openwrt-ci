@@ -1,25 +1,51 @@
 'use strict';
 'require view';
 'require fs';
-'require ui';
+'require poll';
 
 /*
- * nss-wifi-drv 的状态与统计页面。
+ * nss-wifi-drv 的状态页。
  *
- * 数据来源（都由驱动直接暴露，不是我们的估算）：
+ * 数据来源：
  *   /sys/bus/platform/devices/39000000.nss/state     一行 key=value 汇总
- *   /sys/kernel/debug/39000000.nss/wifili_rx         每个 vdev 的收发计数（含字节）
- *   /sys/kernel/debug/39000000.nss/flows             已下发给固件的流转发计数
- *   /sys/kernel/debug/39000000.nss/log               NSS 固件日志
- *   /sys/module/ath11k/parameters/nss_offload        Y/N，Wi-Fi 是否切到 NSS
+ *   /sys/kernel/debug/39000000.nss/wifili_rx         每个 vdev 的收发计数
+ *   /sys/kernel/debug/39000000.nss/flows             已下发的流转发计数
+ *   /sys/kernel/debug/39000000.nss/log               固件日志（可能为空）
+ *   /sys/module/ath11k/parameters/nss_offload        Y/N
  *   /sys/module/nss_wifi_drv/parameters/{wlan,firmware}
  *
- * debugfs 由驱动在 probe 时创建（debugfs_create_dir(dev_name(dev))），设备名
- * 来自 DTS 里的 39000000.nss。换板子的话这个路径要跟着改。
+ * debugfs 目录名来自 DTS 里的 39000000.nss，换板子要跟着改。
  */
 
 var BUS = '/sys/bus/platform/devices/39000000.nss';
 var DBG = '/sys/kernel/debug/39000000.nss';
+var REFRESH = 3;
+
+var STYLE = '' +
+	'.nss-cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));' +
+		'gap:.6rem;margin:.4rem 0 1rem}' +
+	'.nss-card{position:relative;padding:.55rem .7rem .8rem;border-radius:8px;' +
+		'border:1px solid rgba(128,128,128,.28);background:rgba(128,128,128,.06);' +
+		'overflow:hidden}' +
+	'.nss-card-h{display:flex;justify-content:space-between;align-items:center;' +
+		'font-size:11px;opacity:.7;margin-bottom:.3rem}' +
+	'.nss-card-i{width:9px;height:9px;border:1px solid currentColor;border-radius:2px;' +
+		'opacity:.4;display:inline-block}' +
+	'.nss-card-v{font-size:19px;font-weight:500;line-height:1.25;' +
+		'white-space:nowrap;overflow:hidden;text-overflow:ellipsis}' +
+	'.nss-card-s{font-size:11px;opacity:.62;margin-top:.15rem;' +
+		'white-space:nowrap;overflow:hidden;text-overflow:ellipsis}' +
+	'.nss-bar{position:absolute;left:0;right:0;bottom:0;height:2px;' +
+		'background:rgba(128,128,128,.16)}' +
+	'.nss-bar>i{display:block;height:100%}' +
+	'.nss-head{display:flex;justify-content:space-between;align-items:baseline;' +
+		'margin:.2rem 0 .1rem;font-size:12px}' +
+	'.nss-tabs{display:flex;gap:.4rem;margin:.2rem 0 .8rem}' +
+	'.nss-pre{max-height:32rem;overflow:auto;margin:0;padding:.6rem .7rem;' +
+		'border-radius:6px;background:rgba(128,128,128,.1);font-size:12px;' +
+		'line-height:1.5;white-space:pre-wrap;word-break:break-all}';
+
+var GREEN = '#43a047', RED = '#e53935', BLUE = '#2196f3', DIM = 'rgba(128,128,128,.45)';
 
 function cat(path) {
 	return fs.exec('/bin/cat', [ path ]).then(function(r) {
@@ -27,11 +53,20 @@ function cat(path) {
 	}).catch(function() { return ''; });
 }
 
-function tailFile(path, lines) {
-	return fs.exec('/bin/sh', [ '-c', 'tail -n "$1" "$2"', 'sh', String(lines), path ])
-		.then(function(r) {
-			return (r && r.code === 0) ? String(r.stdout || '') : '';
-		}).catch(function() { return ''; });
+function sh(cmd) {
+	return fs.exec('/bin/sh', [ '-c', cmd ]).then(function(r) {
+		return (r && r.code === 0) ? String(r.stdout || '') : '';
+	}).catch(function() { return ''; });
+}
+
+/* 固件日志为空时退回内核里 nss 相关的行，否则这一栏永远是空白。 */
+function readLog() {
+	return cat(DBG + '/log').then(function(t) {
+		t = (t || '').trim();
+		if (t !== '')
+			return t;
+		return sh('dmesg 2>/dev/null | grep -i nss | tail -n 120');
+	}).then(function(t) { return (t || '').trim(); });
 }
 
 function parseKv(text) {
@@ -91,7 +126,6 @@ function parseFlows(text) {
 
 	(text || '').split('\n').forEach(function(line) {
 		var t = line.trim();
-
 		var m = t.match(/^bound (\d+) pushed (\d+)/);
 		if (m) {
 			out.bound = +m[1];
@@ -108,8 +142,8 @@ function parseFlows(text) {
 }
 
 function fmtBytes(n) {
-	var v = Number(n) || 0;
-	var unit = [ 'B', 'KB', 'MB', 'GB', 'TB' ], i = 0;
+	var v = Number(n) || 0, i = 0;
+	var unit = [ 'B', 'KB', 'MB', 'GB', 'TB' ];
 
 	while (v >= 1024 && i < unit.length - 1) {
 		v /= 1024;
@@ -123,19 +157,65 @@ function fmtNum(n) {
 	return (Number(n) || 0).toLocaleString();
 }
 
-function wlanText(v) {
-	var n = parseInt(v, 10) || 0;
-	var parts = [];
+function wlanShort(v) {
+	var n = parseInt(v, 10) || 0, parts = [];
 
-	if (n & 1)
-		parts.push('内置 AHB');
-	if (n & 2)
-		parts.push('外挂 PCIe');
+	if (n & 1) parts.push('AHB');
+	if (n & 2) parts.push('PCIe');
 
-	if (parts.length === 0)
-		return '无（Wi-Fi 未走 NSS）';
+	return parts.length ? parts.join('+') : '无';
+}
 
-	return parts.join(' + ') + '（掩码 ' + n + '）';
+function dot(ok) {
+	return E('span', { 'style': 'color:' + (ok ? GREEN : RED) + ';margin-right:.35rem' }, [ '●' ]);
+}
+
+function card(title, value, sub, pct, color) {
+	return E('div', { 'class': 'nss-card' }, [
+		E('div', { 'class': 'nss-card-h' }, [
+			E('span', {}, [ title ]),
+			E('span', { 'class': 'nss-card-i' })
+		]),
+		E('div', { 'class': 'nss-card-v' }, [ value ]),
+		E('div', { 'class': 'nss-card-s' }, [ sub ]),
+		E('div', { 'class': 'nss-bar' }, [
+			E('i', { 'style': 'width:' + Math.max(0, Math.min(100, pct)) + '%;background:' + color })
+		])
+	]);
+}
+
+function buildCards(st, offload, wlanParm, firmware) {
+	var ready = (st.ready === '1');
+	var running = (st.running === '1');
+	var started = Number(st.started || 0);
+	var expected = Number(st.expected || 0);
+	var peers = Number(st.peers || 0);
+	var nvdev = Number(st.vdevs || 0);
+	var unload = (offload === 'Y');
+	var corePct = expected > 0 ? (started / expected) * 100 : 0;
+
+	return [
+		card('加速状态',
+			ready ? '已就绪' : (running ? '未就绪' : '未启动'),
+			'ready=' + (st.ready || '?') + ' running=' + (st.running || '?'),
+			ready ? 100 : 100, ready ? GREEN : RED),
+
+		card('Wi-Fi 卸载',
+			unload ? '已卸载' : '未卸载',
+			wlanShort(wlanParm || st.wlan) + ' · ' + (offload || '?'),
+			unload ? 100 : 100, unload ? GREEN : DIM),
+
+		card('NSS 核心',
+			started + ' / ' + (expected || '?'),
+			'rings_ready=' + (st.rings_ready || '?'),
+			corePct, corePct >= 100 ? GREEN : RED),
+
+		card('虚拟接口', nvdev + ' 个', 'vdev', 100, BLUE),
+
+		card('硬件客户端', peers + ' 台', 'peers', 100, BLUE),
+
+		card('固件线', firmware || st.firmware || '未知', 'firmware', 100, DIM)
+	];
 }
 
 return view.extend({
@@ -144,7 +224,7 @@ return view.extend({
 			cat(BUS + '/state'),
 			cat(DBG + '/wifili_rx'),
 			cat(DBG + '/flows'),
-			tailFile(DBG + '/log', 30),
+			readLog(),
 			cat('/sys/module/ath11k/parameters/nss_offload'),
 			cat('/sys/module/nss_wifi_drv/parameters/wlan'),
 			cat('/sys/module/nss_wifi_drv/parameters/firmware')
@@ -152,196 +232,187 @@ return view.extend({
 	},
 
 	render: function(data) {
-		var stateRaw = data[0], vdevRaw = data[1], flowRaw = data[2], logRaw = data[3];
+		var st = parseKv(data[0]);
 		var offload = (data[4] || '').trim();
 		var wlanParm = (data[5] || '').trim();
 		var firmware = (data[6] || '').trim();
+		var log = (data[3] || '').trim();
 
-		var st = parseKv(stateRaw);
-		var vdevs = parseVdevs(vdevRaw);
-		var flows = parseFlows(flowRaw);
-		var log = (logRaw || '').trim();
+		var cards = E('div', { 'class': 'nss-cards' },
+			buildCards(st, offload, wlanParm, firmware));
 
-		var ready = (st.ready === '1');
-		var running = (st.running === '1');
-		var peers = Number(st.peers || 0);
-		var nvdev = Number(st.vdevs || 0);
-
-		var dot = function(ok, text) {
-			return E('span', {
-				'style': 'color:' + (ok ? '#4caf50' : '#f44336') + ';font-weight:bold'
-			}, [ '● ' + text ]);
-		};
-
-		var row = function(label, value, hint) {
-			return E('tr', { 'class': 'tr' }, [
-				E('td', { 'class': 'td left', 'width': '22%' }, [ label ]),
-				E('td', { 'class': 'td left' }, [
-					value,
-					hint ? E('div', { 'class': 'cbi-value-description' }, [ hint ]) : ''
-				])
-			]);
-		};
-
-		var th = function(text) {
-			return E('th', { 'class': 'th' }, [ text ]);
-		};
-
-		var td = function(content, align) {
-			return E('td', { 'class': 'td ' + (align || 'left') }, [ content ]);
-		};
-
-		/* ---- 概览 ---- */
-		var overview = E('div', { 'class': 'cbi-section' }, [
-			E('h3', {}, [ 'NSS 数据平面' ]),
-			E('table', { 'class': 'table' }, [
-				row('加速状态', ready
-					? dot(true, '已就绪（ready=1）')
-					: (running
-						? dot(false, '核心运行但数据平面未就绪（ready 不是 1）')
-						: dot(false, '未启动（running 不是 1）')),
-					'取自 /sys/bus/platform/devices/39000000.nss/state'),
-				row('Wi-Fi 卸载', offload === 'Y'
-					? dot(true, 'ath11k 已切到 NSS（nss_offload=Y）')
-					: dot(false, 'ath11k 走内核转发（nss_offload=' + (offload || '未知') + '）'),
-					'N/Y 由 /sys/module/ath11k/parameters/nss_offload 决定'),
-				row('卸载总线', E('code', {}, [ wlanText(wlanParm || st.wlan) ]),
-					'掩码 1=内置 AHB，2=外挂 PCIe，3=两路都卸载'),
-				row('NSS 核心', E('code', {}, [
-					(st.started || '?') + ' / ' + (st.expected || '?') + ' 已启动'
-				]), 'started 对 expected，低于说明有核心没起来'),
-				row('虚拟接口', E('code', {}, [ String(nvdev) + ' 个 vdev' ]),
-					'每个 SSID 一个 vdev，全部由 NSS 收发'),
-				row('硬件客户端', E('code', {}, [ String(peers) + ' 台' ]),
-					'挂在 NSS 硬件转发表上的 WiFi 客户端数量（peers）'),
-				row('固件线', E('code', {}, [ firmware || (st.firmware || '未知') ]),
-					'12.5 为默认；跑 802.11s mesh 才需要 11.4'),
-				row('Ring 状态', (st.rings_ready === '1')
-					? dot(true, 'rings_ready=1')
-					: dot(false, 'rings_ready 不是 1，NSS 会拒绝启动'),
-					'环形缓冲区交接完成才能 boot 核心')
-			])
+		var headText = E('span', {}, [
+			dot(st.ready === '1'),
+			(st.ready === '1') ? '数据平面已就绪' : '数据平面未就绪'
 		]);
 
-		/* ---- vdev 统计 ---- */
-		var vdevRows = [];
+		function setHead(ok) {
+			while (headText.firstChild)
+				headText.removeChild(headText.firstChild);
 
-		if (vdevs.length === 0) {
-			vdevRows.push(E('tr', { 'class': 'tr placeholder' }, [
-				E('td', { 'class': 'td', 'colspan': '7' }, [
-					vdevRaw === ''
-						? '读不到 wifili_rx。debugfs 由 /etc/init.d/boot 开机自动挂载，所以更可能是 NSS 核心没启动，或本机没有 vdev 上报过 —— 先看上面「加速状态」那一栏。'
-						: 'NSS 还没有上报过任何 vdev'
-				])
-			]));
+			headText.appendChild(dot(ok));
+			headText.appendChild(document.createTextNode(
+				ok ? '数据平面已就绪' : '数据平面未就绪'));
 		}
-		else {
-			vdevs.forEach(function(v) {
-				vdevRows.push(E('tr', { 'class': 'tr' }, [
-					td(E('code', {}, [ String(v.ifnum) ]), 'center'),
-					td(fmtNum(v.rx), 'right'),
-					td(fmtBytes(v.bytes), 'right'),
-					td(fmtNum(v.tx), 'right'),
-					td(String(v.except || 0), 'right'),
-					td(String(v.dropped || 0), 'right'),
-					td(String(v.hw_ring_full || 0), 'right')
+
+		/* ---- 接口收发 ---- */
+		var vdevBody = E('tbody', {});
+
+		function rowsVdev(raw, list) {
+			while (vdevBody.firstChild)
+				vdevBody.removeChild(vdevBody.firstChild);
+
+			if (list.length === 0) {
+				vdevBody.appendChild(E('tr', { 'class': 'tr placeholder' }, [
+					E('td', { 'class': 'td', 'colspan': '7' }, [
+						raw === '' ? '无数据' : '尚未上报 vdev'
+					])
+				]));
+				return;
+			}
+
+			list.forEach(function(v) {
+				vdevBody.appendChild(E('tr', { 'class': 'tr' }, [
+					E('td', { 'class': 'td center' }, [ E('code', {}, [ String(v.ifnum) ]) ]),
+					E('td', { 'class': 'td right' }, [ fmtNum(v.rx) ]),
+					E('td', { 'class': 'td right' }, [ fmtBytes(v.bytes) ]),
+					E('td', { 'class': 'td right' }, [ fmtNum(v.tx) ]),
+					E('td', { 'class': 'td right' }, [ String(v.except || 0) ]),
+					E('td', { 'class': 'td right' }, [ String(v.dropped || 0) ]),
+					E('td', { 'class': 'td right' }, [ String(v.hw_ring_full || 0) ])
 				]));
 			});
 		}
 
-		var vdevSection = E('div', { 'class': 'cbi-section' }, [
-			E('h3', {}, [ '各接口收发统计' ]),
-			E('table', { 'class': 'table' }, [
-				E('thead', {}, [
-					E('tr', { 'class': 'tr table-titles' }, [
-						th('接口号'), th('收包'), th('收字节'), th('发包'),
-						th('例外'), th('丢弃'), th('Ring 满')
-					])
-				]),
-				E('tbody', {}, vdevRows)
-			]),
-			E('div', { 'class': 'cbi-value-description' }, [
-				'来源 /sys/kernel/debug/39000000.nss/wifili_rx，是 NSS 固件定期同步回来的计数。',
-				'「收字节」能直接对上你下载的流量，说明这些帧真的走了硬件；',
-				'「例外」是 NSS 处理不了、退回内核的包；「丢弃」和「Ring 满」应该长期为 0。'
-			])
-		]);
+		/* ---- 流转发 ---- */
+		var flowBody = E('tbody', {});
+		var flowSummary = E('span', { 'style': 'font-size:12px;opacity:.65' });
 
-		/* ---- 流表 ---- */
-		var flowRows = [];
+		function rowsFlow(flows) {
+			while (flowBody.firstChild)
+				flowBody.removeChild(flowBody.firstChild);
 
-		if (flows.nodes.length === 0) {
-			flowRows.push(E('tr', { 'class': 'tr placeholder' }, [
-				E('td', { 'class': 'td', 'colspan': '4' }, [ '没有已下发的流转发节点' ])
-			]));
-		}
-		else {
+			flowSummary.textContent = 'bound ' + flows.bound + ' / pushed ' + flows.pushed;
+
+			if (flows.nodes.length === 0) {
+				flowBody.appendChild(E('tr', { 'class': 'tr placeholder' }, [
+					E('td', { 'class': 'td', 'colspan': '4' }, [ '尚未下发流转发节点' ])
+				]));
+				return;
+			}
+
 			flows.nodes.forEach(function(n) {
-				flowRows.push(E('tr', { 'class': 'tr' }, [
-					td(E('code', {}, [ n.name ])),
-					td(fmtNum(n.rx), 'right'),
-					td(fmtNum(n.tx), 'right'),
-					td(n.drop, 'right')
+				flowBody.appendChild(E('tr', { 'class': 'tr' }, [
+					E('td', { 'class': 'td' }, [ E('code', {}, [ n.name ]) ]),
+					E('td', { 'class': 'td right' }, [ fmtNum(n.rx) ]),
+					E('td', { 'class': 'td right' }, [ fmtNum(n.tx) ]),
+					E('td', { 'class': 'td right' }, [ n.drop ])
 				]));
 			});
 		}
 
-		var flowSection = E('div', { 'class': 'cbi-section' }, [
-			E('h3', {}, [ '流转发' ]),
-			E('table', { 'class': 'table' }, [
-				E('thead', {}, [
-					E('tr', { 'class': 'tr table-titles' }, [
-						th('节点'), th('收包'), th('发包'), th('丢弃（4 个原因）')
-					])
-				]),
-				E('tbody', {}, flowRows)
+		rowsVdev(data[1], parseVdevs(data[1]));
+		rowsFlow(parseFlows(data[2]));
+
+		var th = function(t) { return E('th', { 'class': 'th' }, [ t ]); };
+
+		var vdevTable = E('table', { 'class': 'table' }, [
+			E('thead', {}, [
+				E('tr', { 'class': 'tr table-titles' }, [
+					th('接口号'), th('收包'), th('收字节'), th('发包'),
+					th('例外'), th('丢弃'), th('Ring 满')
+				])
 			]),
-			E('div', { 'class': 'cbi-value-description' }, [
-				'来源 /sys/kernel/debug/39000000.nss/flows。bound/pushed 是主机与 NSS 之间的流绑定次数：',
-				E('code', {}, [ String(flows.bound) + ' / ' + String(flows.pushed) ]),
-				'。节点计数持续增长表示转发确实在硬件里跑。'
+			vdevBody
+		]);
+
+		var flowTable = E('table', { 'class': 'table' }, [
+			E('thead', {}, [
+				E('tr', { 'class': 'tr table-titles' }, [
+					th('节点'), th('收包'), th('发包'), th('丢弃')
+				])
+			]),
+			flowBody
+		]);
+
+		/* ---- 两个面板 ---- */
+		var statePane = E('div', {}, [
+			E('div', { 'class': 'cbi-section' }, [
+				E('h3', {}, [ '各接口收发统计' ]),
+				vdevTable
+			]),
+			E('div', { 'class': 'cbi-section' }, [
+				E('h3', {}, [ '流转发 ', flowSummary ]),
+				flowTable
 			])
 		]);
 
-		/* ---- 固件日志 ---- */
-		var logSection = E('div', { 'class': 'cbi-section' }, [
-			E('h3', {}, [ 'NSS 固件日志' ]),
-			E('pre', {
-				'style': 'max-height:300px;overflow:auto;padding:8px;border-radius:4px;' +
-					'font-size:12px;line-height:1.5;background:rgba(128,128,128,0.12);' +
-					'white-space:pre-wrap;word-break:break-all'
-			}, [ log !== '' ? log : '(无输出)' ]),
-			E('div', { 'class': 'cbi-value-description' }, [
-				'取自 /sys/kernel/debug/39000000.nss/log，最近 30 行。',
-				'驱动启动成功的标志在内核日志里：logread -e nss-wifi | tail -3 应能看到 ',
-				E('code', {}, [ 'NSS data plane ready' ]), '。'
-			])
+		var logPane = E('div', { 'style': 'display:none' }, [
+			E('pre', { 'class': 'nss-pre' }, [ log !== '' ? log : '无输出' ])
 		]);
 
-		/* ---- 操作 ---- */
-		var actions = E('div', { 'class': 'cbi-section' }, [
-			E('div', { 'class': 'cbi-page-actions' }, [
-				E('button', {
-					'class': 'btn cbi-button cbi-button-action',
-					'click': ui.createHandlerFn(this, function() {
-						window.location.reload();
-					})
-				}, [ '刷新' ])
-			]),
-			E('div', { 'class': 'cbi-value-description' }, [
-				'这些计数器由 NSS 固件维护，页面只负责读。',
-				'打开 /etc/config/nss-wifi 里的 offload 后必须整机重启才生效——',
-				'Wi-Fi 环的归属在 radio probe 时就定死了，重启服务没用。'
-			])
-		]);
+		/* ---- 标签切换 ---- */
+		var tabState = E('button', { 'class': 'btn cbi-button cbi-button-action' }, [ '状态' ]);
+		var tabLog = E('button', { 'class': 'btn cbi-button' }, [ '日志' ]);
+
+		function show(which) {
+			var isState = (which === 'state');
+
+			statePane.style.display = isState ? '' : 'none';
+			logPane.style.display = isState ? 'none' : '';
+
+			tabState.className = 'btn cbi-button' + (isState ? ' cbi-button-action' : '');
+			tabLog.className = 'btn cbi-button' + (isState ? '' : ' cbi-button-action');
+		}
+
+		tabState.addEventListener('click', function(ev) {
+			ev.preventDefault();
+			show('state');
+		});
+
+		tabLog.addEventListener('click', function(ev) {
+			ev.preventDefault();
+			show('log');
+		});
+
+		/* ---- 每 3 秒刷新计数 ---- */
+		poll.add(function() {
+			if (statePane.style.display === 'none')
+				return Promise.resolve();
+
+			return Promise.all([
+				cat(BUS + '/state'),
+				cat(DBG + '/wifili_rx'),
+				cat(DBG + '/flows')
+			]).then(function(d) {
+				var fresh = parseKv(d[0]);
+
+				while (cards.firstChild)
+					cards.removeChild(cards.firstChild);
+
+				buildCards(fresh, offload, wlanParm, firmware).forEach(function(c) {
+					cards.appendChild(c);
+				});
+
+				setHead(fresh.ready === '1');
+
+				rowsVdev(d[1], parseVdevs(d[1]));
+				rowsFlow(parseFlows(d[2]));
+			});
+		}, REFRESH);
 
 		return E('div', { 'class': 'cbi-map' }, [
-			E('h2', {}, [ 'NSS 卸载状态' ]),
-			overview,
-			vdevSection,
-			flowSection,
-			logSection,
-			actions
+			E('style', {}, [ STYLE ]),
+			E('h2', {}, [ 'NSS 卸载' ]),
+			E('div', { 'class': 'nss-head' }, [
+				headText,
+				E('span', { 'style': 'opacity:.6' },
+					[ '实时 · 每 ' + REFRESH + ' 秒' ])
+			]),
+			cards,
+			E('div', { 'class': 'nss-tabs' }, [ tabState, tabLog ]),
+			statePane,
+			logPane
 		]);
 	},
 
