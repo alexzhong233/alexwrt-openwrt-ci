@@ -164,21 +164,19 @@ jobs:
             ./wrt/staging_dir/host*
             ./wrt/staging_dir/tool*
 
-      # 下载缓存（dl/）暂时关闭。
-      # 它存的是 Buildroot 的源码 tarball，实测 3.36 GB，restore 要 51 秒，
-      # 而省下的下载时间只有 5~15 分钟——单位价值不到编译缓存的十分之一
-      # （编译缓存 6~7 GB 换 3 小时）。更麻烦的是它和编译缓存共用仓库
-      # 10 GB 的总限额，两者加起来正好顶到 98%，一旦触发 LRU 淘汰就是
-      # 3 小时冷编译。所以让位给编译缓存。
-      # 代码保留，需要时把下面六行的注释去掉即可。
-      # - name: Restore Download Cache
-      #   id: cache-dl
-      #   if: ${{ !inputs.WRT_TEST }}
-      #   uses: actions/cache/restore@main
-      #   with:
-      #     path: ./wrt/dl
-      #     key: wrt-dl-${{env.WRT_CACHE_TARGET}}-${{ hashFiles('Config/*.txt') }}
-      #     restore-keys: wrt-dl-${{env.WRT_CACHE_TARGET}}-
+      # dl/ 是编译用的源码 tarball（这个配置大概 2~3 GB），以前每轮都从头
+      # 下次下载，网络一慢这一步就是十几分钟起步。单独给它一份缓存：key 带上
+      # Config 的哈希，配置不变就一直命中，配置变了才重新下一份。
+      # 注意：靠 restore-keys 前缀命中的是「部分匹配」，cache-hit 仍为 false，
+      # 所以每改一次 Config/*.txt 都会新写一条，靠 Cache-Clean 按时收拢。
+      - name: Restore Download Cache
+        id: cache-dl
+        if: ${{ !inputs.WRT_TEST }}
+        uses: actions/cache/restore@main
+        with:
+          path: ./wrt/dl
+          key: wrt-dl-${{env.WRT_CACHE_TARGET}}-${{ hashFiles('Config/*.txt') }}
+          restore-keys: wrt-dl-${{env.WRT_CACHE_TARGET}}-
 
       - name: Prepare Restored Build Cache
         if: ${{ !inputs.WRT_TEST && steps.cache-restore.outputs.cache-matched-key != '' }}
@@ -436,15 +434,14 @@ jobs:
           path: ./build-reports/
           retention-days: 7
 
-      # 下载缓存已关闭，见上方 Restore Download Cache 处的说明。
-      # - name: Save Download Cache
-      #   # 同 Save Build Cache：缓存只是加速手段，超限或失败都不该影响交付。
-      #   if: ${{ !inputs.WRT_TEST && success() && steps.cache-dl.outputs.cache-hit != 'true' }}
-      #   continue-on-error: true
-      #   uses: actions/cache/save@main
-      #   with:
-      #     path: ./wrt/dl
-      #     key: wrt-dl-${{env.WRT_CACHE_TARGET}}-${{ hashFiles('Config/*.txt') }}
+      - name: Save Download Cache
+        # 同 Save Build Cache：缓存只是加速手段，超限或失败都不该影响交付。
+        if: ${{ !inputs.WRT_TEST && success() && steps.cache-dl.outputs.cache-hit != 'true' }}
+        continue-on-error: true
+        uses: actions/cache/save@main
+        with:
+          path: ./wrt/dl
+          key: wrt-dl-${{env.WRT_CACHE_TARGET}}-${{ hashFiles('Config/*.txt') }}
 
       - name: Save Build Cache
         if: ${{ !inputs.WRT_TEST && success() && steps.cache-restore.outputs.cache-hit != 'true' }}
