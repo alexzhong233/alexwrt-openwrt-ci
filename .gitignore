@@ -1,4 +1,18 @@
 # 本地工作目录记忆/工具数据，不入库
 .workbuddy/
-.idea
 
+# IDE 配置
+.idea/
+
+# CI 构建报告：collect-build-reports.sh 输出到 build-reports/，
+# 根目录这些名字曾经被误提交过一次，加规则防止复发。
+/build-reports/
+/config.txt
+/ccache.txt
+/source-commit.txt
+/feeds.buildinfo
+/host-toolchains.txt
+/rust-toolchain.txt
+/*.tsv
+/*-report.txt
+/*-after-build.txt
