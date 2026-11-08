@@ -273,13 +273,13 @@ return view.extend({
 
 			list.forEach(function(v) {
 				vdevBody.appendChild(E('tr', { 'class': 'tr' }, [
-					E('td', { 'class': 'td center' }, [ E('code', {}, [ String(v.ifnum) ]) ]),
-					E('td', { 'class': 'td right' }, [ fmtNum(v.rx) ]),
-					E('td', { 'class': 'td right' }, [ fmtBytes(v.bytes) ]),
-					E('td', { 'class': 'td right' }, [ fmtNum(v.tx) ]),
-					E('td', { 'class': 'td right' }, [ String(v.except || 0) ]),
-					E('td', { 'class': 'td right' }, [ String(v.dropped || 0) ]),
-					E('td', { 'class': 'td right' }, [ String(v.hw_ring_full || 0) ])
+					td([ E('code', {}, [ String(v.ifnum) ]) ], 'center'),
+					td([ fmtNum(v.rx) ], 'right'),
+					td([ fmtBytes(v.bytes) ], 'right'),
+					td([ fmtNum(v.tx) ], 'right'),
+					td([ String(v.except || 0) ], 'right'),
+					td([ String(v.dropped || 0) ], 'right'),
+					td([ String(v.hw_ring_full || 0) ], 'right')
 				]));
 			});
 		}
@@ -303,10 +303,10 @@ return view.extend({
 
 			flows.nodes.forEach(function(n) {
 				flowBody.appendChild(E('tr', { 'class': 'tr' }, [
-					E('td', { 'class': 'td' }, [ E('code', {}, [ n.name ]) ]),
-					E('td', { 'class': 'td right' }, [ fmtNum(n.rx) ]),
-					E('td', { 'class': 'td right' }, [ fmtNum(n.tx) ]),
-					E('td', { 'class': 'td right' }, [ n.drop ])
+					td([ E('code', {}, [ n.name ]) ]),
+					td([ fmtNum(n.rx) ], 'right'),
+					td([ fmtNum(n.tx) ], 'right'),
+					td([ n.drop ], 'right')
 				]));
 			});
 		}
@@ -314,9 +314,19 @@ return view.extend({
 		rowsVdev(data[1], parseVdevs(data[1]));
 		rowsFlow(parseFlows(data[2]));
 
-		/* 对齐类（center/right）LuCI 主题对 th、td 都生效，表头必须与数据列一致。 */
+		/* 对齐同时写 class 和内联 style：第三方主题不一定定义 .th.center/.td.right。 */
 		var th = function(t, align) {
-			return E('th', { 'class': 'th' + (align ? ' ' + align : '') }, [ t ]);
+			return E('th', {
+				'class': 'th' + (align ? ' ' + align : ''),
+				'style': align ? 'text-align:' + align : ''
+			}, [ t ]);
+		};
+
+		var td = function(content, align) {
+			return E('td', {
+				'class': 'td' + (align ? ' ' + align : ''),
+				'style': align ? 'text-align:' + align : ''
+			}, content);
 		};
 
 		var vdevTable = E('table', { 'class': 'table' }, [
