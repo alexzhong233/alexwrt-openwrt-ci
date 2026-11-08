@@ -183,9 +183,9 @@ RELOCATE_MENU "qbittorrent" "$QBITTORRENT_DIR" \
 	"admin/services/qbittorrent" "admin/nas/qbittorrent"
 #Dockerman 用的是 lisaac 0.5.26（Lua 控制器），它自己就建了
 #entry({"admin","docker"}, firstchild())，顶层「Docker」菜单不需要额外处理。
-#雅典娜屏控：上游放在「服务」里，这台机器上它属于系统级调参
-RELOCATE_MENU "athena-led" "$PACKAGE_PATH/luci-app-athena-led" \
-	"admin/services/athena_led" "admin/system/athena_led"
+#雅典娜屏控刻意留在上游的「服务」下，不做菜单迁移：
+#它的页面里有 fs.exec('/etc/init.d/athena_led') 和写配置的操作，菜单键一动
+#就得连控制器一起兜，收益只是少一次点击。
 #NATMap 上游本来就在「网络」，之前这里有个 s/network/services/g 把它搬进了
 #「服务」，现在搬回去。写成显式反向替换，上游哪天又改回 services 也能纠正。
 RELOCATE_MENU "natmapt" "$PACKAGE_PATH/luci-app-natmapt" \
@@ -293,5 +293,44 @@ if [ -f "$ATHENA_IMAGE_MK" ]; then
 	echo " "
 	if sed -i 's/ *luci-i18n-athena-led-zh-cn//g' "$ATHENA_IMAGE_MK"; then
 		echo "athena-led i18n package dropped from DEVICE_PACKAGES"
+	fi
+fi
+
+#雅典娜屏控的「运行状态」永远显示 NOT RUNNING
+#
+#包里 root/usr/share/rpcd/acl.d/luci-app-athena-led.json 只声明了
+#	/var/run/athena-led.pid  -> read
+#但 OpenWrt 上 /var/run 是 /tmp/run 的符号链接。rpcd 的 file 插件先用调用方
+#给的路径过一遍 ACL，通过后再 realpath() 一次；路径一旦变化就用解引用后的
+#路径重新过 ACL（rpcd/file.c 的 rpc_check_symlink_access()）。于是
+#/tmp/run/athena-led.pid 匹配不到白名单里的 /var/run/... 而被拒绝。
+#
+#症状极具迷惑性：服务在跑、屏幕正常显示、init status 返回 running、
+#/var/run/athena-led.pid 内容也对，只有 LuCI 页面一直红字 NOT RUNNING
+#（settings.js 的 getServiceStatus() 读不到 pid 文件就 catch 成 false）。
+#显式把两条路径都授 read 即可，页面本身不用改。
+ACL_ATHENA="$PACKAGE_PATH/luci-app-athena-led/root/usr/share/rpcd/acl.d/luci-app-athena-led.json"
+if [ -f "$ACL_ATHENA" ] && ! grep -q '/tmp/run/athena-led.pid' "$ACL_ATHENA"; then
+	echo " "
+	python3 - "$ACL_ATHENA" <<'PY'
+import json, sys
+
+path = sys.argv[1]
+with open(path, encoding='utf-8') as fp:
+    doc = json.load(fp)
+
+for acl in doc.values():
+    files = acl.get('read', {}).get('file')
+    if isinstance(files, dict) and '/var/run/athena-led.pid' in files:
+        files['/tmp/run/athena-led.pid'] = files['/var/run/athena-led.pid']
+
+with open(path, 'w', encoding='utf-8') as fp:
+    json.dump(doc, fp, indent='\t', ensure_ascii=False)
+    fp.write('\n')
+PY
+	if grep -q '/tmp/run/athena-led.pid' "$ACL_ATHENA"; then
+		echo "athena-led ACL: /tmp/run/athena-led.pid read allowed"
+	else
+		echo "athena-led ACL: patch failed (json shape changed upstream?)"
 	fi
 fi
