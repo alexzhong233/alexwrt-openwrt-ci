@@ -255,6 +255,21 @@ return view.extend({
 				ok ? '数据平面已就绪' : '数据平面未就绪'));
 		}
 
+		/* 对齐同时写 class 和内联 style：第三方主题不一定定义 .th.center/.td.right。 */
+		var th = function(t, align) {
+			return E('th', {
+				'class': 'th' + (align ? ' ' + align : ''),
+				'style': align ? 'text-align:' + align : ''
+			}, [ t ]);
+		};
+
+		var td = function(content, align) {
+			return E('td', {
+				'class': 'td' + (align ? ' ' + align : ''),
+				'style': align ? 'text-align:' + align : ''
+			}, content);
+		};
+
 		/* ---- 接口收发 ---- */
 		var vdevBody = E('tbody', {});
 
@@ -313,21 +328,6 @@ return view.extend({
 
 		rowsVdev(data[1], parseVdevs(data[1]));
 		rowsFlow(parseFlows(data[2]));
-
-		/* 对齐同时写 class 和内联 style：第三方主题不一定定义 .th.center/.td.right。 */
-		var th = function(t, align) {
-			return E('th', {
-				'class': 'th' + (align ? ' ' + align : ''),
-				'style': align ? 'text-align:' + align : ''
-			}, [ t ]);
-		};
-
-		var td = function(content, align) {
-			return E('td', {
-				'class': 'td' + (align ? ' ' + align : ''),
-				'style': align ? 'text-align:' + align : ''
-			}, content);
-		};
 
 		var vdevTable = E('table', { 'class': 'table' }, [
 			E('thead', {}, [
