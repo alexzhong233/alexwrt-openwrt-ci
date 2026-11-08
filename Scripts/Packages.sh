@@ -13,85 +13,6 @@
 CLONE_CACHE_ROOT=${CLONE_CACHE_ROOT:-${TMPDIR:-/tmp}/wrt-clone-cache}
 mkdir -p "$CLONE_CACHE_ROOT"
 
-# ---- tag 对齐 --------------------------------------------------------------
-# 上游分支是移动的，维护者推到分支上的半成品会直接进固件。这里按版本号决定
-# 要不要退到最新 tag：
-#
-#   分支 HEAD 的 PKG_VERSION == 最新 tag 的 PKG_VERSION → 切到该 tag
-#       版本一模一样，等于把“后续提交”挡在门外，固件内容不变，零风险。
-#   最新 tag 版本 < 分支版本 → 保持分支
-#       典型例子：destan19/OpenAppFilter 分支已 7.0.2，最新 tag 还停在 7.0.1，
-#       跟 tag 等于主动降级、丢掉两个月的修复。OpenClash 的 dev 同理。
-#   仓库没有 tag（luci-app-qbittorrent、luci-app-natmapt）→ 保持分支不动。
-#
-# 不用 GitHub API 查 tag：未认证限流 60 次/小时，30 多个仓库两轮就耗光，
-# 构建会莫名其妙失败。git ls-remote 走 git 协议，没有这个限制。
-#
-# 任何一步失败（拉不到 tag、找不到 Makefile、版本读不出）都只是保持分支，
-# 不会让构建失败——这条规则只优化稳定性，不应该成为新的故障点。
-latest_tag() {
-	git ls-remote --tags --refs "$1" 2>/dev/null |
-		sed 's#.*refs/tags/##' |
-		grep -E '^v?[0-9]' |
-		sort -V | tail -n1
-}
-
-# 仓库里所有声明 PKG_VERSION 的 Makefile（相对路径）。一个仓库常常有多个
-# 子包，版本还各自演进，必须全部取到。
-pkg_makefiles() {
-	( cd "$1" 2>/dev/null && grep -rl --include=Makefile --exclude-dir=.git '^PKG_VERSION' . 2>/dev/null |
-		sed 's#^\./##' | sort )
-}
-
-read_pkg_version() {
-	sed -n 's/^PKG_VERSION[[:space:]:?]*=[[:space:]]*//p' "$1" 2>/dev/null |
-		head -n1 | tr -d '[:space:]'
-}
-
-pin_tag_if_same_version() {
-	local DIR=$1 URL=$2 TAG F VH VT BAD=""
-	local -a FILES=()
-
-	TAG=$(latest_tag "$URL")
-	[ -n "$TAG" ] || return 0
-
-	while IFS= read -r F; do
-		[ -n "$F" ] && FILES+=("$F")
-	done <<< "$(pkg_makefiles "$DIR")"
-	[ ${#FILES[@]} -gt 0 ] || return 0
-
-	# 浅克隆里没有 tag，单独把这一个拉下来
-	if ! git -C "$DIR" fetch --depth=1 -q origin "refs/tags/$TAG" >/dev/null 2>&1; then
-		echo "tag: $TAG 拉取失败，保持分支"
-		return 0
-	fi
-
-	# 必须每个 Makefile 的版本都对得上才切换。只比其中一个是错的：
-	# OpenAppFilter 的 luci-app-oaf 是 7.0，open-app-filter 已经是 7.0.2，
-	# 只比前者会把它降回 tag 里的 7.0.1。
-	for F in "${FILES[@]}"; do
-		VH=$(read_pkg_version "$DIR/$F")
-		[ -n "$VH" ] || continue
-
-		VT=$(git -C "$DIR" show "FETCH_HEAD:$F" 2>/dev/null |
-			sed -n 's/^PKG_VERSION[[:space:]:?]*=[[:space:]]*//p' | head -n1 | tr -d '[:space:]')
-
-		if [ "$VH" != "$VT" ]; then
-			BAD="$F（分支 $VH / tag ${VT:-无此文件}）"
-			break
-		fi
-	done
-
-	if [ -n "$BAD" ]; then
-		echo "tag: 最新 tag $TAG 版本落后：$BAD，保持分支"
-		return 0
-	fi
-
-	if git -C "$DIR" checkout -q FETCH_HEAD >/dev/null 2>&1; then
-		echo "tag: 已切到 $TAG（${#FILES[@]} 个 Makefile 版本全部一致）"
-	fi
-}
-
 clone_repo() {
 	local REPO=$1
 	local BRANCH=$2
@@ -119,12 +40,6 @@ clone_repo() {
 		echo "::error::Failed to clone $REPO (branch: ${BRANCH:-default}) into $DEST" >&2
 		rm -rf "$DEST"
 		exit 1
-	fi
-
-	# sparse checkout 的仓库里同时躺着几十个无关包，第一个 Makefile 未必是
-	# 我们要的，按版本号对齐没有意义，直接跳过。
-	if [ $# -eq 0 ]; then
-		pin_tag_if_same_version "$DEST" "https://github.com/$REPO.git"
 	fi
 
 	if [ -n "$CACHED" ]; then
@@ -256,10 +171,7 @@ UPDATE_PACKAGE "vantage" "anothaDev/luci-theme-vantage" "main"
 
 UPDATE_PACKAGE "momo" "nikkinikki-org/OpenWrt-momo" "main"
 UPDATE_PACKAGE "nikki" "nikkinikki-org/OpenWrt-nikki" "main"
-# 用 master 而不是 dev：dev 是上游的开发分支（0.48.014），master 对应已发布的
-# 稳定版（0.48.002，与最新 tag 一致）。早先跟 dev 只是初始模板带过来的，没有
-# 任何依赖 dev 特有功能的地方，跟着开发分支跑属于白担风险。
-UPDATE_PACKAGE "openclash" "vernesong/OpenClash" "master" "pkg"
+UPDATE_PACKAGE "openclash" "vernesong/OpenClash" "dev" "pkg"
 UPDATE_PACKAGE "passwall" "Openwrt-Passwall/openwrt-passwall" "main" "pkg"
 UPDATE_PACKAGE "passwall2" "Openwrt-Passwall/openwrt-passwall2" "main" "pkg"
 UPDATE_PACKAGE "dockerman" "lisaac/luci-app-dockerman" "master"
