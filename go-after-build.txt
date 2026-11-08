@@ -1,0 +1,2 @@
+/mnt/build_wrt/staging_dir/hostpkg/lib/go-1.27/bin/go
+go version go1.27.3 linux/amd64

@@ -1,0 +1,5 @@
+Rust toolchain: stable-x86_64-unknown-linux-gnu
+Rust target: aarch64-unknown-linux-musl
+rustc 1.99.1 (58cf8f9c3 2026-10-13)
+Using runner Rust stable-x86_64-unknown-linux-gnu for aarch64-unknown-linux-musl
+afc4266dd25628d751eabe642ae643d57b808cda4757b966acdf2d9b106b515a  /home/runner/work/niubiAlex-openwrt-ci/niubiAlex-openwrt-ci/wrt/feeds/packages/lang/rust/Makefile

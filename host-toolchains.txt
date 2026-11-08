@@ -1,0 +1,8 @@
+go version go1.26.10 linux/amd64
+Go bootstrap root: /opt/hostedtoolcache/go/1.26.10/x64
+Host Python PGO: disabled
+BPF LLVM prefix: /usr/lib/llvm-21
+Ubuntu clang version 21.1.8 (6ubuntu1)
+Target: x86_64-pc-linux-gnu
+Thread model: posix
+InstalledDir: /usr/lib/llvm-21/bin
