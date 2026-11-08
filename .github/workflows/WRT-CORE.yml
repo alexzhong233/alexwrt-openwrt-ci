@@ -508,9 +508,13 @@ jobs:
           # 必须钉死。不指定时 tag 打在「这一步执行时默认分支的最新 commit」上，
           # 而一次构建要跑一两个小时，中途任何一次 push 都会让 tag 指向别人的
           # commit —— 结果就是固件和源码标签对不上，release 的 created_at 跟着
-          # 变成那个 commit 的时间，列表排序也跟着乱。WRT_HASH 是 Clone Code
-          # 步骤 checkout 后 git rev-parse HEAD 的值，即真正被编译的 commit。
-          target_commitish: ${{env.WRT_HASH}}
+          # 变成那个 commit 的时间，列表排序也跟着乱。
+          #
+          # 这里只能用 github.sha（本仓库被 dispatch 触发时的 HEAD），不能拿
+          # WRT_HASH：那个值是 Clone Code 步骤在上游源码仓库 ./wrt/ 里
+          # git rev-parse HEAD 的结果（固件版本号里的 r0-<hash> 就是它），
+          # 在本仓库不存在，GitHub 会直接 422 invalid target_commitish。
+          target_commitish: ${{ github.sha }}
           prerelease: ${{inputs.WRT_TEST}}
           # 用 * 而不是 *.*：SHA256SUMS 这类没有扩展名的文件也要一起发布。
           files: ./wrt/upload/*
@@ -523,7 +527,7 @@ jobs:
 
             源码：${{env.WRT_REPO}}
             分支：${{env.WRT_BRANCH}}
-            提交：${{env.WRT_HASH}}
+            上游提交：${{env.WRT_HASH}}
 
             配置：${{env.WRT_CONFIG}}
             平台：${{env.WRT_TARGET}}
