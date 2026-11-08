@@ -85,6 +85,21 @@ LuCI 里是「服务 → NetBird 工具」，能看状态、切模式、立即�
 
 `wt0` 的两条转发规则由 NetBird 运行时插进 `inet fw4`，执行 `/etc/init.d/firewall restart` 会被冲掉，之后 `/etc/init.d/netbird restart` 即可恢复。
 
+### UU 游戏加速器的「正在注册」
+
+`luci-app-uugamebooster` 的状态页要三个条件同时成立才显示 Ready：进程存在、与网易控制服务器有 ESTABLISHED 连接、注册记录 `/tmp/uu/activate_status` 非空。前两个重启后能自行恢复，第三个不能——文件在 tmpfs，重启即清空；而注册事实存在网易云端，服务端认为设备已注册就不会让插件重写它。
+
+结果是：**重启后 LuCI 一直显示「正在注册」，但加速本身是正常的**。别用页面判断，看这两条：
+
+```sh
+/usr/libexec/uuplugin/uu-detect          # boosted= 后面有设备 IP 就是在加速
+cat /proc/net/dev | grep tun             # 隔 10 秒看两次，tun163 的 RX/TX 在涨就是流量真的走了隧道
+```
+
+这个显示问题没有修。原因是它只影响展示：`ip rule` 的 `from <设备IP> lookup <表>`、`table 179` 里的 `dev tun163` 路由、`/proc/net/dev` 的字节增长全都不依赖那个文件，手机 App 侧也能正常绑定。代价是失去了一个真实的状态指示——首次注册确实没完成时，页面同样显示「正在注册」，此时以 App 为准。
+
+两个容易误判的地方：`nft list tables | grep XU_ACC` 为空是正常的（OEM 构建只建策略路由，不建这些表）；两次 `uu-detect` 的 `cloud=` 地址不同也正常（有多个控制节点，取第一条 ESTABLISHED）。
+
 ### 升级辅助
 
 | 脚本 | 作用 |
