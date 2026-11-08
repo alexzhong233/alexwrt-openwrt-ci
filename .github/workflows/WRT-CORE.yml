@@ -505,6 +505,12 @@ jobs:
         uses: softprops/action-gh-release@master
         with:
           tag_name: ${{env.WRT_CONFIG}}-${{env.WRT_INFO}}-${{env.WRT_BRANCH}}-${{env.WRT_DATE}}
+          # 必须钉死。不指定时 tag 打在「这一步执行时默认分支的最新 commit」上，
+          # 而一次构建要跑一两个小时，中途任何一次 push 都会让 tag 指向别人的
+          # commit —— 结果就是固件和源码标签对不上，release 的 created_at 跟着
+          # 变成那个 commit 的时间，列表排序也跟着乱。WRT_HASH 是 Clone Code
+          # 步骤 checkout 后 git rev-parse HEAD 的值，即真正被编译的 commit。
+          target_commitish: ${{env.WRT_HASH}}
           prerelease: ${{inputs.WRT_TEST}}
           # 用 * 而不是 *.*：SHA256SUMS 这类没有扩展名的文件也要一起发布。
           files: ./wrt/upload/*
@@ -522,11 +528,18 @@ jobs:
             配置：${{env.WRT_CONFIG}}
             平台：${{env.WRT_TARGET}}
 
+            主机名：${{env.WRT_NAME}}
             登录地址：${{env.WRT_IP}}
             登录密码：${{env.WRT_PW}}
 
-            WIFI名称：上游默认（首次启动按硬件生成）
-            WIFI密码：随机生成，见路由器 /etc/config/wireless
+            WIFI名称：alexwrt-jdcloud-2.4g / alexwrt-jdcloud-5.2g / alexwrt-jdcloud-5.8g
+            WIFI密码：12345678
+
+            出厂无线预设（国家码 US，仅对全新刷机生效；升级时保留配置则不覆盖已有设置）：
+            - 2.4G　信道 5　　HE40
+            - 5.2G　信道 36　 HE160（PCIe 4×4，首次启动需等 60 秒 CAC）
+            - 5.8G　信道 161  HE80 （SoC 内置 2×2）
+            2.4G 干扰重时可自行在「网络 → 无线」里换信道，其他别动。
 
             内核版本：${{env.WRT_KVER}}
             插件列表：${{env.WRT_LIST}}
