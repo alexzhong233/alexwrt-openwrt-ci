@@ -28,11 +28,17 @@ jobs:
         run: |
           set -euo pipefail
 
-          # 构建内部已经由 cache-rollover 按 key 前缀收拢过一代，这里保留最新
-          # 创建的那一份（下次构建就是用它回滚），其余全部删除，防止撞上仓库
-          # 10 GB 的缓存总额限制。
+          # 构建内部已经由 cache-rollover 按 key 前缀收拢过一代，这里再做一层
+          # 保底，防止撞上仓库 10 GB 的缓存总额限制。
+          #
+          # 必须按 key 分组，不能全局只留最新一条：一次构建会产生两类缓存
+          #   wrote-dl-<target>-<Config hash>      下载缓存，配置一改就新写一条
+          #   wrt-<source>-<branch>-<target>-<sha> 编译缓存，cache-hit 时会跳过保存
+          # 两类混在一起排序的话，编译缓存永远比下载缓存旧，会被整类删掉，
+          # 下一轮必然退化成冷编译（4 小时）。所以去掉末尾 hash 段后的同组
+          # key 算一类，每组各留最新一条。
           gh cache list --repo "$GH_REPO" --limit 100 --json id,key,createdAt \
-            --jq 'sort_by(.createdAt) | reverse | .[1:] | .[].id' |
+            --jq '[.[] | . + {group: (.key | sub("-[^-]+$"; ""))}] | group_by(.group) | map(sort_by(.createdAt) | reverse | .[1:]) | flatten | .[].id' |
             while read -r CACHE_ID; do
               [ -n "$CACHE_ID" ] || continue
               gh cache delete "$CACHE_ID" --repo "$GH_REPO" ||
