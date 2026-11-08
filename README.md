@@ -13,7 +13,7 @@
 | 工作流 | `.github/workflows/NIUBIALEX.yml`（调度入口）、`WRT-CORE.yml`（实际编译，被调用） |
 | 设备配置 | `Config/IPQ60XX-NIUBIALEX-WIFI-YES.txt`（在 `GENERAL.txt` 之后写入，同名项以它为准） |
 | 软件包处理 | `Scripts/Packages.sh` |
-| 构建期设置 | `Scripts/Settings.sh`（SSID/密码/后台地址）、`Scripts/Handles.sh`（主题与插件修补） |
+| 构建期设置 | `Scripts/Settings.sh`（后台地址、主机名）、`Scripts/Handles.sh`（主题与插件修补） |
 | 固件文件注入 | `Files/RE-CS-02/` |
 
 手动运行有两个入参：`PACKAGE`（每行一个额外 `CONFIG_PACKAGE_*`）和 `TEST`（只生成配置、不编译固件）。
@@ -33,15 +33,7 @@
 
 ## Wi-Fi 默认值
 
-| 频段 | SSID | 信道 | htmode |
-|---|---|---|---|
-| 板载 2.4 GHz | `niubiAlex` | 5 | HE40 |
-| 板载 5 GHz | `niubiAlex` | 161 | HE80 |
-| PCIe / 5.2 GHz | `niubiAlexGaming` | 36 | HE160 |
-
-默认密码 `88888888`，首次启动后建议修改。
-
-无线不做任何定制，完全走上游规则：首次启动时 `/sbin/wifi config` 按硬件生成 `/etc/config/wireless`，三个 radio（2.4G / 5.2G / 5.8G）各自一套，SSID 取上游默认值，WPA2 密钥随机生成。第一次登录后可以在 LuCI 里自行修改，之后不会被任何脚本覆盖。
+无线不做任何定制，完全走上游规则：首次启动时 `/sbin/wifi config` 按硬件生成 `/etc/config/wireless`，三个 radio（2.4G / 5.2G / 5.8G）各自一套，SSID 取上游默认值（`<主机名>-Jdcloud-2.4g` 之类由 mac80211 生成），WPA2 密钥随机生成。第一次登录后可以在 LuCI 里自行修改，之后不会被任何脚本覆盖；密码可以在路由器上 `uci show wireless | grep key` 查。
 
 原先有一个首启脚本 `Files/RE-CS-02/etc/uci-defaults/99-niubialex-wireless` 会改 SSID 和密码，已删除：它在「无线还没就绪」时返回 1，而 `uci_apply_defaults` 只删除返回 0 的脚本，于是脚本被留下来每次启动重试；重试一旦成功，就会把用户改过的无线设置覆盖回默认值。
 
@@ -52,7 +44,7 @@
 - Docker、Docker Compose、1Panel 管理页 `luci-app-istorepanel`（容器本体由页面按需安装）、NetBird LuCI、FullConeNAT、RTP2HTTPD、软件包管理器、SysTools。
 - NSS：`nss-firmware`、`kmod-nss-wifi-drv`、`ATH11K_NSS_WIFI` 与 ath11k/mac80211 NSS 补丁都来自上游源码；自建状态页 `luci-app-nss-status` 在“状态 -> NSS 卸载”，直接读 `nss-wifi-drv` 的 debugfs 显示加速状态、各 vdev 收发计数和流表，不含驱动，不负责开启 NSS。
 - 默认进 rootfs：NetBird、PassWall、OpenClash、Dockerman。HomeProxy 和 PassWall2 只编译为可安装模块。
-- 不进固件：ZeroTier、易有云文件管理器。WorkBuddy2API 本体与 `luci-app-workbuddy2api` 已内置，页面在“服务 -> WorkBuddy2API”。
+- 不进固件：ZeroTier、易有云文件管理器。WorkBuddy2API 已整个移出构建，界面和拉取脚本都留在 `backup/`。
 - NetBird 使用原生 CLI，`netbird up` 不做任何参数包装，行为由 LuCI 的 NetBird 页面决定。
 
 软件包在 CI 里由 `Scripts/Packages.sh` 下载进编译树，仓库不保存编译好的 `.ipk`。脚本装到 `/usr/bin/`，说明文档装到 `/usr/share/niubiAlex/`，都不注册为常驻服务。逐包核对见 [docs/SOFTWARE-AUDIT.md](docs/SOFTWARE-AUDIT.md)。
