@@ -2,10 +2,11 @@
 
 这里的文件曾经被编进固件，现在全部移出。目录结构保持原样，方便对照路径或整段恢复。
 
-`Files/RE-CS-02/` 是构建时唯一被拷进固件的目录；`LuCI/` 下的子目录会被 `Scripts/prepare-workbuddy2api.sh` 拷进构建树。放在仓库根 `backup/` 下的内容两者都不会碰，所以不会被编进固件。
+`Files/RE-CS-02/` 是构建时唯一被拷进固件的目录。放在仓库根 `backup/` 下的内容不会被编进固件。
 
 - `netbird-legacy/` —— NetBird 的旧辅助脚本，见下文。
 - `luci-app-workbuddy2api/` —— 自建的 WorkBuddy2API 管理页面，见文末。
+- `prepare-workbuddy2api.sh` + `uci-defaults/99-workbuddy2api` —— WorkBuddy2API 的构建期准备脚本（拉上游源码、补应用文件、挂首启初始化）。它里面“拷 `LuCI/` 页面”那一段已拆到 `Scripts/prepare-luci-packages.sh` 保留，见文末最后一节。
 
 ## 为什么移除
 
@@ -57,7 +58,7 @@ netbird status
 
 注意两点：
 
-1. `Scripts/prepare-workbuddy2api.sh` 会遍历 `LuCI/*/` 全部拷进构建树，这个目录一旦放回去就会自动被编进去，**不需要改脚本**；但必须同时在 `Config/IPQ60XX-NIUBIALEX-WIFI-YES.txt` 里加回：
+1. `Scripts/prepare-luci-packages.sh` 会遍历 `LuCI/*/` 全部拷进构建树，这个目录一旦放回去就会自动被编进去，**不需要改脚本**；但必须同时在 `Config/IPQ60XX-NIUBIALEX-WIFI-YES.txt` 里加回：
 
    ```sh
    CONFIG_PACKAGE_luci-app-workbuddy2api=y
@@ -70,3 +71,36 @@ netbird status
 ```sh
 git mv backup/luci-app-workbuddy2api LuCI/luci-app-workbuddy2api
 ```
+
+## prepare-workbuddy2api.sh（2026-11-08 移入）
+
+`Scripts/prepare-workbuddy2api.sh` 在 2026-11-08 整个移到这里，同时带走了只有它引用的 `Scripts/uci-defaults/99-workbuddy2api`（现在在 `backup/uci-defaults/`）。`.github/workflows/WRT-CORE.yml` 里对应的调用行已删除。
+
+这个脚本原本做四件事，其中**第一件被拆出来单独保留**了：
+
+| 原职责 | 现状 |
+|---|---|
+| 遍历 `LuCI/*/` 拷进构建树 | **已拆到 `Scripts/prepare-luci-packages.sh`**，工作流在同一位置调用。`luci-app-nss-status`、`luci-app-netbird-tools` 照常进固件 |
+| 克隆 `ardeyouxipianyi/workbuddy2api-hub` 到 `package/workbuddy2api` | 不再发生，包里没有这个包 |
+| 把 `wb_*.py` + `dashboard.html` 补进包的 `files/` | 不再发生 |
+| 挂 `99-workbuddy2api` 首启初始化 | 不再发生 |
+
+配置里的 `CONFIG_PACKAGE_workbuddy2api=m` 同时删掉了：包不在构建树里，留着这行只是个不存在的符号（defconfig 静默丢弃），什么也编不出来。所以现在 **WorkBuddy2API 既不进固件、也不产出 apk**，要用就去上游 release 下现成的包装。
+
+### 恢复
+
+```sh
+git mv backup/prepare-workbuddy2api.sh Scripts/prepare-workbuddy2api.sh
+git mv backup/uci-defaults Scripts/uci-defaults
+git mv backup/luci-app-workbuddy2api LuCI/luci-app-workbuddy2api
+```
+
+然后在 `.github/workflows/WRT-CORE.yml` 的 `Custom Packages` 步骤里加回一行（放在 `prepare-luci-packages.sh` 之后即可）：
+
+```yaml
+          $GITHUB_WORKSPACE/Scripts/prepare-workbuddy2api.sh
+```
+
+配置里再加回 `CONFIG_PACKAGE_workbuddy2api=m`（只编译出包）或 `=y`（进固件）。
+
+两点注意：① 脚本里的 `SCRIPT_DIR/uci-defaults/99-workbuddy2api` 是相对自身路径的，`uci-defaults/` 必须和脚本同级；② 恢复后它会再拷一遍 `LuCI/`，与 `prepare-luci-packages.sh` 重复，但重复拷贝无害。
