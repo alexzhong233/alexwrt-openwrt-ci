@@ -72,10 +72,18 @@ RELOCATE_MENU() {
 
 	[ -d "$ROOT" ] || return 0
 
-	for F in $(find "$ROOT" -type f -path '*/menu.d/*.json' 2>/dev/null); do
+	#-L 不能省：改用官方 feeds 的包，ROOT 是 feeds install 建出来的符号链接
+	#（./package/feeds/<feed>/<name> -> ../../feeds/<feed>/applications/<name>），
+	#find 默认不下降「起始点本身是符号链接」的目录，会扫出 0 个文件并且一声不响
+	#地跳过改写 —— 之前 openlist / qbittorrent 的菜单就因此一直留在「服务」里。
+	for F in $(find -L "$ROOT" -type f -path '*/menu.d/*.json' 2>/dev/null); do
 		sed -i "s#\"$OLD#\"$NEW#g" "$F" && CNT=$((CNT + 1))
 	done
-	echo "menu: $NAME -> $NEW ($CNT files)"
+	if [ "$CNT" -eq 0 ]; then
+		echo "menu: $NAME -> $NEW (0 files; no menu.d under $ROOT)"
+	else
+		echo "menu: $NAME -> $NEW ($CNT files)"
+	fi
 }
 
 RELOCATE_MENU "netbird" "$PACKAGE_PATH/luci-app-netbird" \
@@ -88,31 +96,8 @@ RELOCATE_MENU "openlist" "$OPENLIST_DIR" \
 QBITTORRENT_DIR=$(PKG_DIR luci-app-qbittorrent) || QBITTORRENT_DIR=""
 RELOCATE_MENU "qbittorrent" "$QBITTORRENT_DIR" \
 	"admin/services/qbittorrent" "admin/nas/qbittorrent"
-#Dockerman 换回官方 feeds 版后，菜单从「服务/Dockerman JS」搬到顶层「Docker」。
-#
-#lisaac 0.5.26 是 Lua 控制器，自己建了 entry({"admin","docker"}, firstchild())，
-#所以老固件里 Docker 一直是顶层菜单。官方版是 JS 版，menu.d 里把它放在
-#admin/services/dockerman 下，标题还叫 "Dockerman JS"。这里把整份 JSON 的键
-#前缀换掉，父键 admin/docker 自带 title + firstchild，顶层节点自然成立，
-#不需要另外造分类节点。order 从 60 改成 45：60 是 upstream 里 network 的序号，
-#45 正好卡在 NAS(40) 和 VPN(50) 之间，和原来「Docker 排在最后」的观感也不同，
-#更贴近老布局。
-DOCKERMAN_DIR=$(PKG_DIR luci-app-dockerman) || DOCKERMAN_DIR=""
-if [ -d "$DOCKERMAN_DIR/root/usr/share/luci/menu.d" ]; then
-	echo " "
-	RELOCATE_MENU "dockerman" "$DOCKERMAN_DIR" \
-		"admin/services/dockerman" "admin/docker"
-	sed -i \
-		-e 's/"title": "Dockerman JS"/"title": "Docker"/' \
-		-e '/"admin\/docker": {/,/}/ s/"order": "60"/"order": "45"/' \
-		"$DOCKERMAN_DIR"/root/usr/share/luci/menu.d/*.json
-	if grep -q '"admin/docker"' "$DOCKERMAN_DIR"/root/usr/share/luci/menu.d/*.json; then
-		echo "menu: dockerman -> admin/docker (Docker)"
-	else
-		echo "::error::dockerman menu relocation did not apply" >&2
-		exit 1
-	fi
-fi
+#Dockerman 用的是 lisaac 0.5.26（Lua 控制器），它自己就建了
+#entry({"admin","docker"}, firstchild())，顶层「Docker」菜单不需要额外处理。
 #雅典娜屏控：上游放在「服务」里，这台机器上它属于系统级调参
 RELOCATE_MENU "athena-led" "$PACKAGE_PATH/luci-app-athena-led" \
 	"admin/services/athena_led" "admin/system/athena_led"

@@ -185,17 +185,20 @@ UPDATE_PACKAGE "nikki" "nikkinikki-org/OpenWrt-nikki" "main"
 #
 # 少 clone 两个仓库，也少一份"上游改结构、脚本静默失效"的风险。
 UPDATE_PACKAGE "passwall2" "Openwrt-Passwall/openwrt-passwall2" "main" "pkg"
-# Dockerman 换回官方 luci feed（26.309.25350，JS + ucode）。
+# Dockerman 保持 lisaac 0.5.26（Lua + CBI + luci-lib-docker），不换官方 feeds 版。
 #
-# lisaac 0.5.26 是 Lua 版，额外依赖 luci-lib-docker；官方版是重写过的 JS 版，
-# ucode 直接读写 docker socket，不再需要那个库。
-#
-# 唯一的差别是菜单：lisaac 版建的是顶层 "admin/docker"（firstchild），官方版
-# 放在「服务」下面的 admin/services/dockerman，标题还叫 "Dockerman JS"。
-# 我们要的是顶层 Docker，所以在 Handles.sh 里把菜单键整体搬到 admin/docker。
-# 另外官方版少了容器内文件管理（container_list_file 那一套），这是它的取舍。
+# 官方 26.309.25350 是 JS + ucode 重写版，体积略小、不依赖 luci-lib-docker，但
+# 砍掉了容器内文件管理（浏览/上传/下载容器里的文件），菜单也从顶层 Docker 缩到
+# 「服务 / Dockerman JS」。这台机器要用容器内文件管理，所以留下来源不变。
+UPDATE_PACKAGE "dockerman" "lisaac/luci-app-dockerman" "master"
+# firewall4/APK 对版本字段按 SemVer 校验，不接受 Dockerman Makefile 当前的
+# "v0.5.26" 写法；去掉前缀后不改变软件版本，只修正打包元数据。
+DOCKERMAN_MAKEFILE="./package/luci-app-dockerman/applications/luci-app-dockerman/Makefile"
+if [ -f "$DOCKERMAN_MAKEFILE" ]; then
+	sed -i 's/^PKG_VERSION:=v/PKG_VERSION:=/' "$DOCKERMAN_MAKEFILE"
+fi
 
-# luci-lib-docker 仍然要 clone：官方 feed 里早就没有这个库了，而
+# luci-lib-docker 也要 clone：官方 feed 里早就没有这个库了，而
 # luci-app-istorepanel 的 LUCI_DEPENDS 里明写着 +luci-lib-docker。缺了它，
 # .config 里包照样选中，打 rootfs 时 apk 才报 "luci-lib-docker (no such
 # package)"。只能从 lisaac 的原仓库取。
@@ -403,15 +406,15 @@ UPDATE_PACKAGE "mt5700m" "LianXia233/luci-app-mt5700m" "main"
 UPDATE_PACKAGE "netmonitor" "LianXia233/luci-app-netmonitor" "main"
 UPDATE_PACKAGE "qmodem-generic" "LianXia233/luci-app-qmodem-generic" "main"
 
-# 改用官方 feeds 的包（openclash / passwall / openlist / dockerman / diskman /
-# qbittorrent / vlmcsd / sing-box）。
+# 改用官方 feeds 的包（openclash / passwall / openlist / diskman / qbittorrent /
+# vlmcsd / sing-box）。
 #
 # 它们不在上面的自建包清单里，所以 WRT-CORE 的 "Verify Package Selection" 只会
 # 报 warning 而不会失败；feeds update/install 出问题时，make defconfig 会静默
 # 丢掉对应的 CONFIG_PACKAGE_* 行，最后产出一个"构建成功但少了代理页/网盘页"的
 # 固件。这里显式检查一次，缺了就中断。
 for FEED_PKG in luci-app-openclash luci-app-passwall luci-app-openlist openlist \
-	luci-app-dockerman luci-app-diskman luci-app-qbittorrent qbittorrent \
+	luci-app-diskman luci-app-qbittorrent qbittorrent \
 	vlmcsd luci-app-vlmcsd sing-box; do
 	FOUND=""
 	for FEED_DIR in ./package/feeds/luci ./package/feeds/packages; do
@@ -422,7 +425,7 @@ for FEED_PKG in luci-app-openclash luci-app-passwall luci-app-openlist openlist 
 		exit 1
 	fi
 done
-echo "feeds packages present: openclash / passwall / openlist / dockerman / diskman / qbittorrent / vlmcsd / sing-box"
+echo "feeds packages present: openclash / passwall / openlist / diskman / qbittorrent / vlmcsd / sing-box"
 
 #引入私有扩展脚本
 if [ -f "$GITHUB_WORKSPACE/Scripts/PRIVATE.sh" ]; then

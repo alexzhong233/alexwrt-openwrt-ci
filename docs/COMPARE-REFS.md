@@ -113,10 +113,12 @@ WiFi 这一行的实现差异值得注意：ax6600.emmc 是"静态覆盖"，好�
 | vlmcsd | `apk mkpkg` 报 `package version is invalid` | 上游写 `PKG_VERSION=svn1112`，`svn` 前缀非法 |
 | vlmcsd | 多文件传给同一个 `gcc -c -o` | 旧版 GNUmakefile 和 ccache 包装器不兼容 |
 
-> 2026-11-08 补：这三个坑已经不用再踩了 —— Dockerman / vlmcsd（连同 diskman、
-> qbittorrent、sing-box、passwall、openclash、openlist）全部改回官方 feeds 的
-> 版本，那两处 `PKG_VERSION` 剥离补丁和 vlmcsd 的 `Build/Compile` 替换都已删除。
-> 仍然第三方的是 oaf（destan19）和 luci-lib-docker（lisaac，istorepanel 要）。
+> 2026-11-08 补：vlmcsd 那两个坑已经不用再踩了 —— vlmcsd（连同 diskman、
+> qbittorrent、sing-box、passwall、openclash、openlist）改回官方 feeds 的版本，
+> vlmcsd 的 `Build/Compile` 替换和它自己的 `PKG_VERSION` 剥离补丁都已删除。
+> Dockerman 仍是 lisaac 0.5.26（要容器内文件管理），所以第一行那个 `v0.5.26`
+> 前缀剥离补丁还在。仍然第三方的有 dockerman、oaf（destan19）和
+> luci-lib-docker（lisaac，dockerman 和 istorepanel 都要）。
 
 共同规律：**新 APK 打包器要求版本号必须以数字开头**，而很多老包还停留在 opkg 时代（opkg 不校验）。以后再加自建包，先看一眼它的 `PKG_VERSION` 是不是字母开头。
 
