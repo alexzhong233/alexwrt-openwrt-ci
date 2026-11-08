@@ -22,7 +22,7 @@
 
 ## 脚本使用原则
 
-`/usr/bin/` 下的脚本都是手动工具，不会因为刷入固件就自行执行或改动配置，只有明确运行后才会检查或修改。NetBird 兼容规则另有一个 `/etc/init.d/netbird-passwall-compat-watch` 事件守护脚本，但默认不 `enable`，需要时手动启用；它与轮询式 `netbird-passwall-compat` 二选一，不要同时开。
+`/usr/bin/` 下的脚本都是手动工具，不会因为刷入固件就自行执行或改动配置，只有明确运行后才会检查或修改。NetBird 兼容规则的两个守护（事件式 `netbird-passwall-compat-watch`、轮询式 `netbird-passwall-compat`）由 `/etc/config/niubialex` 统一开关：`option mode` 取 `off`（默认）/ `watch` / `poll`，**两个 init 脚本只有模式匹配时才启动**，所以即使手滑 `enable` 过也不会常驻，也不会两个同时跑。开关可以在 LuCI「服务 → NetBird 工具」里切，也可以命令行改。
 
 遇到问题时，先运行诊断脚本，再根据诊断结果选择对应的修复脚本。不要为了“预防”而把所有脚本都运行一遍。
 
@@ -54,25 +54,27 @@ netbird up --disable-dns=false
 /usr/bin/netbird-passwall-compat.sh --once
 ```
 
-确认输出的 PassWall mark 和 NetBird 链正确后，可以注册为开机服务：
+确认输出的 PassWall mark 和 NetBird 链正确后，如果要让它在后台持续补规则，用模式开关启用（**不要**直接 `enable` 服务）：
 
 ```sh
-/etc/init.d/netbird-passwall-compat enable
-/etc/init.d/netbird-passwall-compat start
+# 事件驱动版，推荐
+/usr/bin/niubialex-netbird mode watch
+
+# 或者老的 30 秒轮询版
+/usr/bin/niubialex-netbird mode poll
+
+# 关掉（默认状态）
+/usr/bin/niubialex-netbird mode off
 ```
 
-服务默认每 30 秒检查一次，只在规则缺失或 PassWall mark 变化时补回，不重复插入，也不会重启 NetBird、PassWall 或路由器。临时需要更快检查时，可用 `INTERVAL=5 /usr/bin/netbird-passwall-compat.sh --once` 做单次检查；已注册服务可这样临时改为 10 秒：
+切换模式会自动停掉另一个服务、只保留一个开机自启项。兜底检查间隔和轮询间隔也可以调：
 
 ```sh
-INTERVAL=10 /etc/init.d/netbird-passwall-compat restart
+/usr/bin/niubialex-netbird watchdog 60     # 事件版的兜底全量检查间隔，0 关闭
+/usr/bin/niubialex-netbird interval 30     # 轮询版的检查间隔
 ```
 
-停止服务：
-
-```sh
-/etc/init.d/netbird-passwall-compat disable
-/etc/init.d/netbird-passwall-compat stop
-```
+这些值存在 `/etc/config/niubialex`，已加入 sysupgrade 保留列表。LuCI 里对应「服务 → NetBird 工具」，能在同一页看到 wt0 转发规则是否还在、守护进程有没有遗留、当前模式和兼容规则条数。
 
 ### NetBird 与 dnsmasq 的 53 端口冲突
 

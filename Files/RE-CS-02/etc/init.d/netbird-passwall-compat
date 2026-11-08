@@ -1,14 +1,35 @@
 #!/bin/sh /etc/rc.common
 
+# 轮询版兼容规则守护（每 INTERVAL 秒检查一次）。
+#
+# 默认不运行。只有 /etc/config/niubialex 里显式写了
+#
+#   option mode 'poll'
+#
+# 才会启动。这样即使有人手滑 enable 过，也不会在每次开机时白跑一份常驻进程。
+# 与 netbird-passwall-compat-watch 二选一，由同一个 mode 值决定。
+
 START=99
 STOP=10
 USE_PROCD=1
-INTERVAL="${INTERVAL:-30}"
+
+TAG="netbird-passwall-compat"
 
 start_service() {
+	local mode interval
+
+	mode=$(uci -q get niubialex.compat.mode 2>/dev/null)
+	if [ "$mode" != "poll" ]; then
+		logger -t "$TAG" "mode='${mode:-unset}'，未启用轮询守护（需要 niubialex.compat.mode=poll）"
+		return 0
+	fi
+
+	interval="${INTERVAL:-$(uci -q get niubialex.compat.interval 2>/dev/null)}"
+	[ -n "$interval" ] || interval=30
+
 	procd_open_instance
 	procd_set_param command /usr/bin/netbird-passwall-compat.sh
-	procd_set_param env INTERVAL="$INTERVAL"
+	procd_set_param env INTERVAL="$interval"
 	procd_set_param respawn 3600 5 5
 	procd_set_param stdout 1
 	procd_set_param stderr 1

@@ -32,6 +32,7 @@ WATCHDOG=${WATCHDOG:-60}
 MATCH=${MATCH:-netbird}
 LOCK_DIR=${LOCK_DIR:-/var/run/netbird-passwall-compat-watch.lock}
 MAX_BACKOFF=16
+MAIN_PID=$$
 WATCHDOG_PID=""
 PIPE_PID=""
 
@@ -92,6 +93,27 @@ cleanup() {
 on_term() {
 	cleanup
 	exit 0
+}
+
+# 上一轮如果是被 SIGKILL 结束的（procd stop 超时就干这个），trap 不执行，
+# 看门狗子 shell 和读 nft monitor 的子 shell 都会变成孤儿，继续反复补规则。
+# 调用这个函数时我们已经持有锁，场上其它同名进程必然是遗留物，可以清掉。
+kill_strays() {
+	local entry pid cmdline
+
+	for entry in /proc/[0-9]*/cmdline; do
+		[ -r "$entry" ] || continue
+		pid="${entry#/proc/}"
+		pid="${pid%/cmdline}"
+		[ "$pid" = "$$" ] && continue
+		cmdline=$(tr '\0' ' ' <"$entry" 2>/dev/null)
+		case "$cmdline" in
+		*netbird-passwall-compat-watch.sh*)
+			log "清理遗留进程 pid=$pid"
+			kill -9 "$pid" 2>/dev/null
+			;;
+		esac
+	done
 }
 
 # 复用兼容脚本的单次检查模式：发现 mark、发现链、幂等补规则都在里面。
@@ -166,6 +188,8 @@ acquire_lock || {
 	exit 0
 }
 
+kill_strays
+
 trap on_term INT TERM
 trap cleanup EXIT
 
@@ -187,7 +211,11 @@ if [ "$WATCHDOG" -gt 0 ] 2>/dev/null; then
 		# 子 shell 不能继承 EXIT 清理，否则它退出时会误删主进程的锁。
 		trap - EXIT INT TERM
 		while :; do
-			sleep "$WATCHDOG"
+			sleep "$WATCHDOG" || exit 0
+			# 主进程被 SIGKILL 时 trap 不会执行（procd stop 超时就会走这条路），
+			# 这个子 shell 会变成孤儿，继续每 WATCHDOG 秒重插一遍规则。
+			# 累积几次就是好几个进程同时改 nft，所以每轮都要确认父进程还活着。
+			kill -0 "$MAIN_PID" 2>/dev/null || exit 0
 			ensure_now
 		done
 	) &

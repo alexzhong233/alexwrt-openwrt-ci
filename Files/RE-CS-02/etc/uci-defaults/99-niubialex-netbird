@@ -1,0 +1,40 @@
+#!/bin/sh
+# SPDX-License-Identifier: MIT
+#
+# /etc/config/niubialex 的首次初始化。
+#
+# 这份配置只有一个作用：给「NetBird + PassWall 兼容规则守护」一个显式的开关。
+# 之前两个守护只要被 enable 过一次就会永久开机常驻，而且可以同时跑（它们共用
+# 同一把补丁锁，同时开等于互相抵消）。现在改成：
+#
+#   option mode 'off'    关闭（默认）
+#   option mode 'watch'  只跑事件驱动版（推荐）
+#   option mode 'poll'   只跑 30 秒轮询版（老版本行为，CPU 占用略高）
+#
+# 两个 init 脚本启动时会读这个值，不匹配就什么都不做。
+
+[ -f /etc/config/niubialex ] || cat >/etc/config/niubialex <<'EOF'
+config netbird 'compat'
+	option mode 'off'
+	option watchdog '60'
+	option interval '30'
+EOF
+
+# 这个文件不是任何软件包的 conffile，sysupgrade 默认不会保留，
+# 不显式加进去的话重刷固件后模式设置会回到 off。
+touch /etc/sysupgrade.conf
+grep -qxF '/etc/config/niubialex' /etc/sysupgrade.conf 2>/dev/null || \
+	echo '/etc/config/niubialex' >>/etc/sysupgrade.conf
+
+# 兜底：老固件里可能已经 enable 过这两个服务，改成默认关之后要顺手撤掉
+# 开机软链接，否则每次启动都会白跑一次 start_service。
+for SVC in netbird-passwall-compat netbird-passwall-compat-watch; do
+	MODE=$(uci -q get niubialex.compat.mode)
+	case "$SVC:$MODE" in
+	netbird-passwall-compat:poll) ;;
+	netbird-passwall-compat-watch:watch) ;;
+	*) /etc/init.d/$SVC disable >/dev/null 2>&1 || true ;;
+	esac
+done
+
+exit 0

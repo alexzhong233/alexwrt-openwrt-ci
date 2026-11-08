@@ -3,21 +3,34 @@
 # 事件驱动版兼容规则守护。和 netbird-passwall-compat 二选一，
 # 不要同时启用：两者共用同一把补丁锁，轮询服务会占住它。
 #
-#   /etc/init.d/netbird-passwall-compat-watch enable
-#   /etc/init.d/netbird-passwall-compat-watch start
+# 默认不运行。只有 /etc/config/niubialex 里显式写了
 #
-# 临时调整兜底间隔：
-#   WATCHDOG=120 /etc/init.d/netbird-passwall-compat-watch restart
+#   option mode 'watch'
+#
+# 才会启动，兜底间隔取 option watchdog（默认 60 秒，0 关闭兜底）。
+# 临时覆盖仍然可用：WATCHDOG=120 /etc/init.d/netbird-passwall-compat-watch restart
 
 START=99
 STOP=10
 USE_PROCD=1
-WATCHDOG="${WATCHDOG:-60}"
+
+TAG="netbird-passwall-compat-watch"
 
 start_service() {
+	local mode watchdog
+
+	mode=$(uci -q get niubialex.compat.mode 2>/dev/null)
+	if [ "$mode" != "watch" ]; then
+		logger -t "$TAG" "mode='${mode:-unset}'，未启用事件守护（需要 niubialex.compat.mode=watch）"
+		return 0
+	fi
+
+	watchdog="${WATCHDOG:-$(uci -q get niubialex.compat.watchdog 2>/dev/null)}"
+	[ -n "$watchdog" ] || watchdog=60
+
 	procd_open_instance
 	procd_set_param command /usr/bin/netbird-passwall-compat-watch.sh
-	procd_set_param env WATCHDOG="$WATCHDOG"
+	procd_set_param env WATCHDOG="$watchdog"
 	procd_set_param respawn 3600 5 5
 	procd_set_param stdout 1
 	procd_set_param stderr 1

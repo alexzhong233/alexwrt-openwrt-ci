@@ -1,0 +1,13 @@
+{
+	"admin/services/netbird-tools": {
+		"title": "NetBird 工具",
+		"order": 60,
+		"action": {
+			"type": "view",
+			"path": "netbird-tools/status"
+		},
+		"depends": {
+			"acl": [ "luci-app-netbird-tools" ]
+		}
+	}
+}
