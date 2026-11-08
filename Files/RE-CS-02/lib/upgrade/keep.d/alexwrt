@@ -1,0 +1,14 @@
+# sysupgrade 额外保留项（本项目补充）。
+#
+# base-files 自带的 keep.d 已经整目录保留 /etc/config/，所以各服务的 UCI 配置
+# （openlist2 / samba4 / netbird / alexwrt …）本来就不会丢，这里不用重复写。
+#
+# 需要单独补的是「数据目录」：
+#   /etc/openlist2/  openlist2 的 data.db（用户、存储、索引都在里面）
+#                    config.json 由 init 每次启动从 UCI 重新生成，跟着一起留也无害。
+# 这个包自己的 Makefile 没有提供 keep.d，不写这一行的话，勾「保留配置」升级后
+# OpenList 会退回出厂空库（管理员账号、挂载的网盘、分享链接全部消失）。
+#
+# 注意：sysupgrade 的备份包是打在 /tmp（内存盘）里的，若 data.db 涨到几百 MB，
+# 升级会明显变慢甚至有内存压力。库特别大时先手动备份一份再刷。
+/etc/openlist2/

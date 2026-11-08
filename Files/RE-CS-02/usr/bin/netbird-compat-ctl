@@ -55,6 +55,20 @@ get_opt() {
 	printf '%s' "${v:-$2}"
 }
 
+# /etc/config/alexwrt 不是任何软件包的 conffile，全新刷机时这个文件并不存在。
+# 而 uci set 作用在不存在的配置文件上并不保证成功（不同版本行为不一致），
+# 所以改配置之前先落一份默认模板。文件在 /etc/config/ 下，base-files 的
+# keep.d 会整目录保留，升级不丢。
+ensure_cfg() {
+	[ -f /etc/config/alexwrt ] && return 0
+	cat >/etc/config/alexwrt <<'EOF'
+config netbird 'compat'
+	option mode 'off'
+	option watchdog '60'
+EOF
+	uci -q commit alexwrt 2>/dev/null || true
+}
+
 do_status() {
 	local mode watchdog wt0 wt0_rules compat_rules state ip networks nb
 	local nb_en nb_run w_en
@@ -111,6 +125,7 @@ set_mode() {
 		;;
 	esac
 
+	ensure_cfg
 	uci -q set "$CFG.mode=$mode" || {
 		echo "写入 uci 失败" >&2
 		return 1
@@ -145,6 +160,7 @@ set_number() {
 		;;
 	esac
 
+	ensure_cfg
 	uci -q set "$CFG.$key=$value" || return 1
 	uci -q commit alexwrt || return 1
 	echo "$label 已设为 $value"
