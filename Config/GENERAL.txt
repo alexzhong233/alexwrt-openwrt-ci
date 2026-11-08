@@ -4,7 +4,8 @@ CONFIG_PACKAGE_luci-app-homeproxy=y
 CONFIG_PACKAGE_luci-app-autoreboot=y
 CONFIG_PACKAGE_luci-app-gecoosac=y
 CONFIG_PACKAGE_luci-app-natmapt=y
-CONFIG_PACKAGE_luci-app-partexp=y
+#partexp 只编包，不进固件；需要时 apk add luci-app-partexp
+CONFIG_PACKAGE_luci-app-partexp=m
 CONFIG_PACKAGE_luci-app-samba4=y
 CONFIG_PACKAGE_luci-app-upnp=y
 CONFIG_PACKAGE_luci-app-wolultra=y
