@@ -85,8 +85,34 @@ RELOCATE_MENU "netbird" "$PACKAGE_PATH/luci-app-netbird" \
 OPENLIST_DIR=$(PKG_DIR luci-app-openlist) || OPENLIST_DIR=""
 RELOCATE_MENU "openlist" "$OPENLIST_DIR" \
 	"admin/services/openlist" "admin/nas/openlist"
-RELOCATE_MENU "qbittorrent" "$PACKAGE_PATH/luci-app-qbittorrent" \
+QBITTORRENT_DIR=$(PKG_DIR luci-app-qbittorrent) || QBITTORRENT_DIR=""
+RELOCATE_MENU "qbittorrent" "$QBITTORRENT_DIR" \
 	"admin/services/qbittorrent" "admin/nas/qbittorrent"
+#Dockerman 换回官方 feeds 版后，菜单从「服务/Dockerman JS」搬到顶层「Docker」。
+#
+#lisaac 0.5.26 是 Lua 控制器，自己建了 entry({"admin","docker"}, firstchild())，
+#所以老固件里 Docker 一直是顶层菜单。官方版是 JS 版，menu.d 里把它放在
+#admin/services/dockerman 下，标题还叫 "Dockerman JS"。这里把整份 JSON 的键
+#前缀换掉，父键 admin/docker 自带 title + firstchild，顶层节点自然成立，
+#不需要另外造分类节点。order 从 60 改成 45：60 是 upstream 里 network 的序号，
+#45 正好卡在 NAS(40) 和 VPN(50) 之间，和原来「Docker 排在最后」的观感也不同，
+#更贴近老布局。
+DOCKERMAN_DIR=$(PKG_DIR luci-app-dockerman) || DOCKERMAN_DIR=""
+if [ -d "$DOCKERMAN_DIR/root/usr/share/luci/menu.d" ]; then
+	echo " "
+	RELOCATE_MENU "dockerman" "$DOCKERMAN_DIR" \
+		"admin/services/dockerman" "admin/docker"
+	sed -i \
+		-e 's/"title": "Dockerman JS"/"title": "Docker"/' \
+		-e '/"admin\/docker": {/,/}/ s/"order": "60"/"order": "45"/' \
+		"$DOCKERMAN_DIR"/root/usr/share/luci/menu.d/*.json
+	if grep -q '"admin/docker"' "$DOCKERMAN_DIR"/root/usr/share/luci/menu.d/*.json; then
+		echo "menu: dockerman -> admin/docker (Docker)"
+	else
+		echo "::error::dockerman menu relocation did not apply" >&2
+		exit 1
+	fi
+fi
 #雅典娜屏控：上游放在「服务」里，这台机器上它属于系统级调参
 RELOCATE_MENU "athena-led" "$PACKAGE_PATH/luci-app-athena-led" \
 	"admin/services/athena_led" "admin/system/athena_led"
@@ -159,6 +185,44 @@ if [ -n "$UUGAME_MAKEFILE" ]; then
 	else
 		echo "uugamebooster fix failed; continuing!"
 	fi
+fi
+
+#sing-box 用官方 feeds 版，但要去掉 naive_outbound 依赖
+#
+#feeds 的 sing-box full 变体把 with_naive_outbound 写成定值（def_bool y），
+#并且 DEPENDS 到 libcronet —— 那是 Chromium 的 net 栈，构建要下载一份
+#700 MB 的 clang、PGO 剖面和 gn/ninja，还要几十 GB 磁盘，GitHub Runner 直接
+#撑不下去。我们根本不需要它：passwall 只用 sing-box 跑 hysteria2/tuic 这类
+#出站，NaiveProxy 自己有独立客户端（INCLUDE_NaiveProxy 也是关的）。
+#
+#两处必须一起改：
+#  · DEPENDS 里的 +SING_BOX_BUILD_NAIVE_OUTBOUND:libcronet
+#  · Kconfig 里的 config SING_BOX_BUILD_NAIVE_OUTBOUND / def_bool y
+#    （无 prompt 的符号在 .config 里改不动，只能从 Kconfig 删除）
+#删完之后 GO_PKG_TAGS 里 $(if $(CONFIG_SING_BOX_BUILD_NAIVE_OUTBOUND),...) 自然
+#变空，sing-box 回到纯 Go 编译。改完用 grep 兜底：上游哪天换了写法就直接失败，
+#而不是悄悄把 Chromium 拖回构建。
+#
+#顺手把 full 变体里四个路由器上用不到的 tag 也摘掉：cloudflared（Cloudflare
+#隧道客户端）、openconnect、openvpn、usbip —— 它们在官方版里是硬编码常开的，
+#光 cloudflared 就是十几 MiB 的 Go 代码。viking 那份本来就没带这些，体积才对得上。
+SINGBOX_MK="$FEEDS_PATH/packages/net/sing-box/Makefile"
+if [ -f "$SINGBOX_MK" ]; then
+	echo " "
+	sed -i \
+		-e 's/ +SING_BOX_BUILD_NAIVE_OUTBOUND:libcronet//' \
+		-e '/^[[:space:]]*config SING_BOX_BUILD_NAIVE_OUTBOUND$/,/^[[:space:]]*depends on /d' \
+		-e '/^[[:space:]]*with_cloudflared[[:space:]]*\\$/d' \
+		-e '/^[[:space:]]*with_openconnect[[:space:]]*\\$/d' \
+		-e '/^[[:space:]]*with_openvpn[[:space:]]*\\$/d' \
+		-e '/^[[:space:]]*with_usbip[[:space:]]*\\$/d' \
+		"$SINGBOX_MK"
+	if grep -q 'SING_BOX_BUILD_NAIVE_OUTBOUND:libcronet' "$SINGBOX_MK" ||
+		grep -qE '^[[:space:]]*config SING_BOX_BUILD_NAIVE_OUTBOUND$' "$SINGBOX_MK"; then
+		echo "::error::feeds sing-box still pulls libcronet; the Makefile layout changed" >&2
+		exit 1
+	fi
+	echo "sing-box: naive_outbound (libcronet) + cloudflared/openconnect/openvpn/usbip tags removed"
 fi
 
 #从设备默认包列表里去掉 luci-i18n-athena-led-zh-cn

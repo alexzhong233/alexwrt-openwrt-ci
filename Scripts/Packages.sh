@@ -185,20 +185,22 @@ UPDATE_PACKAGE "nikki" "nikkinikki-org/OpenWrt-nikki" "main"
 #
 # 少 clone 两个仓库，也少一份"上游改结构、脚本静默失效"的风险。
 UPDATE_PACKAGE "passwall2" "Openwrt-Passwall/openwrt-passwall2" "main" "pkg"
-UPDATE_PACKAGE "dockerman" "lisaac/luci-app-dockerman" "master"
-# firewall4/APK 对版本字段按 SemVer 校验，不接受 Dockerman Makefile 当前的
-# "v0.5.26" 写法；去掉前缀后不改变软件版本，只修正打包元数据。
-DOCKERMAN_MAKEFILE="./package/luci-app-dockerman/applications/luci-app-dockerman/Makefile"
-if [ -f "$DOCKERMAN_MAKEFILE" ]; then
-	sed -i 's/^PKG_VERSION:=v/PKG_VERSION:=/' "$DOCKERMAN_MAKEFILE"
-fi
+# Dockerman 换回官方 luci feed（26.309.25350，JS + ucode）。
+#
+# lisaac 0.5.26 是 Lua 版，额外依赖 luci-lib-docker；官方版是重写过的 JS 版，
+# ucode 直接读写 docker socket，不再需要那个库。
+#
+# 唯一的差别是菜单：lisaac 版建的是顶层 "admin/docker"（firstchild），官方版
+# 放在「服务」下面的 admin/services/dockerman，标题还叫 "Dockerman JS"。
+# 我们要的是顶层 Docker，所以在 Handles.sh 里把菜单键整体搬到 admin/docker。
+# 另外官方版少了容器内文件管理（container_list_file 那一套），这是它的取舍。
 
-# Dockerman 和 1Panel 面板都依赖 luci-lib-docker，而现在的 luci feed 只留下
-# luci-app-dockerman / luci-app-docker，早就不带这个库了。缺了它，.config 里
-# 两个面板照样选中，等到打包 rootfs 时 apk 才会报 "luci-lib-docker (no such
+# luci-lib-docker 仍然要 clone：官方 feed 里早就没有这个库了，而
+# luci-app-istorepanel 的 LUCI_DEPENDS 里明写着 +luci-lib-docker。缺了它，
+# .config 里包照样选中，打 rootfs 时 apk 才报 "luci-lib-docker (no such
 # package)"。只能从 lisaac 的原仓库取。
 UPDATE_NESTED_PACKAGE "luci-lib-docker" "lisaac/luci-lib-docker" "master" "collections/luci-lib-docker"
-# 与 Dockerman 同样的 APK 版本号问题：上游写的是 v0.3.4。
+# 新 APK 打包器要求版本号以数字开头，上游写的是 v0.3.4。
 DOCKER_LIB_MAKEFILE="./package/luci-lib-docker/Makefile"
 if [ -f "$DOCKER_LIB_MAKEFILE" ]; then
 	sed -i 's/^PKG_VERSION:=v/PKG_VERSION:=/' "$DOCKER_LIB_MAKEFILE"
@@ -226,51 +228,13 @@ UPDATE_NESTED_PACKAGE "luci-app-athena-led" \
 	"main" \
 	"luci-app-athena-led"
 UPDATE_TOPLEVEL_PACKAGE "luci-app-harbor-file" "destan19/luci-app-harbor-file" "main"
-UPDATE_TOPLEVEL_PACKAGE "vlmcsd" "mchome/openwrt-vlmcsd" "master"
-# vlmcsd 的旧版 GNUmakefile 与 OpenWrt 的 ccache 包装器不兼容：它会把多个
-# C 文件错误地传给同一个 gcc -c -o 命令。使用真实交叉编译器并串行构建。
-VLMCSD_MAKEFILE="./package/vlmcsd/Makefile"
-if [ -f "$VLMCSD_MAKEFILE" ]; then
-	# 上游写的是 PKG_VERSION=svn1112。新 APK 打包器要求版本号必须以数字
-	# 开头，否则 apk mkpkg 直接报 "package version is invalid" 并中断编译。
-	# 去掉 svn 前缀不改变软件版本，只修正打包元数据（与 Dockerman 的 v 前缀同理）。
-	sed -i -E 's/^PKG_VERSION[[:space:]]*[:+]?=[[:space:]]*svn/PKG_VERSION:=/' "$VLMCSD_MAKEFILE"
-	python3 - "$VLMCSD_MAKEFILE" <<'PYEOF'
-import re
-import sys
-
-path = sys.argv[1]
-content = open(path, encoding="utf-8").read()
-
-content = re.sub(r"\ndefine Build/Compile\n.*?endef\n", "\n", content, flags=re.S)
-compile_block = r'''
-define Build/Compile
-	$(MAKE) -j1 -C $(PKG_BUILD_DIR) \
-		CC="$(TARGET_CC_NOCACHE)" \
-		CXX="$(TARGET_CXX_NOCACHE)" \
-		AR="$(TARGET_AR)" \
-		RANLIB="$(TARGET_RANLIB)" \
-		STRIP="$(STRIP)" \
-		AS="$(TARGET_CROSS)as" \
-		LD="$(TARGET_LD)" \
-		CFLAGS="$(TARGET_CFLAGS) $(TARGET_CPPFLAGS)" \
-		LDFLAGS="$(TARGET_LDFLAGS)" \
-		CROSS="$(TARGET_CROSS)" \
-		ARCH="$(ARCH)" \
-		MAX_THREADS=1
-endef
-'''
-
-marker = "$(eval $(call BuildPackage,vlmcsd))"
-if marker not in content:
-    raise SystemExit("vlmcsd BuildPackage marker not found")
-if "TARGET_CC_NOCACHE" not in content:
-    content = content.replace(marker, compile_block + "\n" + marker, 1)
-
-open(path, "w", encoding="utf-8", newline="").write(content)
-PYEOF
-fi
-UPDATE_TOPLEVEL_PACKAGE "luci-app-vlmcsd" "mchome/luci-app-vlmcsd" "master"
+# vlmcsd 换回官方 feeds：核心是 Wind4/vlmcsd（pin 在 2020-03-30 e599080，同一个
+# 程序的不同 fork，激活行为不变），页面是官方 JS 单页，配置走 uci
+# /etc/config/vlmcsd，不再是 mchome 版的 /etc/vlmcsd.ini。
+#
+# 顺带删掉原来那 40 行补丁：mchome 的 GNUmakefile 会把多个 .c 塞进同一个
+# gcc -c -o，和 ccache 包装器冲突，才需要替换整个 Build/Compile；官方 Makefile
+# 没这问题。老版的 PKG_VERSION=svn1112 也不合 APK 的版本号规则，官方版是日期式。
 UPDATE_NESTED_PACKAGE "luci-app-netbird" "looong-cat/luci-app-netbird" "main" "luci-app-netbird"
 
 # NetBird is a Go package in the OpenWrt packages feed. Reuse the feed copy
@@ -358,12 +322,23 @@ fi
 
 UPDATE_PACKAGE "easytier" "EasyTier/luci-app-easytier" "main"
 UPDATE_PACKAGE "qmodem" "FUjr/QModem" "main"
-UPDATE_PACKAGE "viking" "VIKINGYFY/packages" "main" "" "axonhub gecoosac miniupnpd sing-box luci-app-homeproxy luci-app-timewol luci-app-upnp luci-app-wolplus luci-app-wolultra"
+UPDATE_PACKAGE "viking" "VIKINGYFY/packages" "main" "" "axonhub gecoosac miniupnpd luci-app-homeproxy luci-app-timewol luci-app-upnp luci-app-wolplus luci-app-wolultra"
+# sing-box 用官方 feeds 的那份（1.14.3 正式版），不拷这个仓库里的 1.15.0-alpha13。
+# 第 5 个参数里去掉 sing-box 只是不再删 feeds 的同名目录，克隆下来的整包里
+# 仍然带着它，必须单独删掉，否则构建树里同时存在两份 sing-box 定义。
+# 官方版另有 libcronet 的问题，补丁在 Handles.sh。
+rm -rf ./package/packages/sing-box
 
-UPDATE_PACKAGE "diskman" "sbwml/luci-app-diskman" "main"
+# diskman / qbittorrent 也回到官方 feeds：
+#   · luci-app-diskman 0.2.13（lisaac，Lua + luci-compat）比 sbwml 1.0.0 多了
+#     RAID（mdadm + kmod-md-raid456/linear）、btrfs 子卷、NTFS3 与 cp932/936/950
+#     三种文件名编码；luci-compat 我们本来就装着，实际只多几个 kmod。
+#   · luci-app-qbittorrent：核心两版都是 5.3.0、同一个 codeload tarball，Qt6 更是
+#     同为 6.12.0、libtorrent 同为 2.0.15 —— sbwml 仓库自带的 qt6base/qt6tools/
+#     rblibtorrent 和 feeds 完全同版本，唯一差别是页面拆成 config + log 两页。
+#     顺带少 clone 一个自带整套 Qt6 的大仓库。
 UPDATE_PACKAGE "diskmanager" "4IceG/luci-app-mini-diskmanager" "main"
 UPDATE_PACKAGE "mosdns" "sbwml/luci-app-mosdns" "v5" "" "v2dat"
-UPDATE_PACKAGE "qbittorrent" "sbwml/luci-app-qbittorrent" "master" "" "qt6base qt6tools rblibtorrent"
 UPDATE_PACKAGE "uugamebooster" "xiaodoudou/luci-app-uugamebooster" "master" "pkg"
 UPDATE_PACKAGE "quickfile" "sbwml/luci-app-quickfile" "main"
 # OpenList 用官方 feeds 的 openlist + luci-app-openlist（immortalwrt/packages 维护，
@@ -428,13 +403,16 @@ UPDATE_PACKAGE "mt5700m" "LianXia233/luci-app-mt5700m" "main"
 UPDATE_PACKAGE "netmonitor" "LianXia233/luci-app-netmonitor" "main"
 UPDATE_PACKAGE "qmodem-generic" "LianXia233/luci-app-qmodem-generic" "main"
 
-# 改用官方 feeds 的四个包（openclash / passwall / openlist / luci-app-openlist）。
+# 改用官方 feeds 的包（openclash / passwall / openlist / dockerman / diskman /
+# qbittorrent / vlmcsd / sing-box）。
 #
 # 它们不在上面的自建包清单里，所以 WRT-CORE 的 "Verify Package Selection" 只会
 # 报 warning 而不会失败；feeds update/install 出问题时，make defconfig 会静默
 # 丢掉对应的 CONFIG_PACKAGE_* 行，最后产出一个"构建成功但少了代理页/网盘页"的
 # 固件。这里显式检查一次，缺了就中断。
-for FEED_PKG in luci-app-openclash luci-app-passwall luci-app-openlist openlist; do
+for FEED_PKG in luci-app-openclash luci-app-passwall luci-app-openlist openlist \
+	luci-app-dockerman luci-app-diskman luci-app-qbittorrent qbittorrent \
+	vlmcsd luci-app-vlmcsd sing-box; do
 	FOUND=""
 	for FEED_DIR in ./package/feeds/luci ./package/feeds/packages; do
 		[ -e "$FEED_DIR/$FEED_PKG" ] && FOUND=1
@@ -444,7 +422,7 @@ for FEED_PKG in luci-app-openclash luci-app-passwall luci-app-openlist openlist;
 		exit 1
 	fi
 done
-echo "feeds packages present: openclash / passwall / openlist"
+echo "feeds packages present: openclash / passwall / openlist / dockerman / diskman / qbittorrent / vlmcsd / sing-box"
 
 #引入私有扩展脚本
 if [ -f "$GITHUB_WORKSPACE/Scripts/PRIVATE.sh" ]; then
