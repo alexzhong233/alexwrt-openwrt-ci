@@ -33,7 +33,17 @@
 
 ## Wi-Fi 默认值
 
-无线不做任何定制，完全走上游规则：首次启动时 `/sbin/wifi config` 按硬件生成 `/etc/config/wireless`，三个 radio（2.4G / 5.2G / 5.8G）各自一套，SSID 取上游默认值（`<主机名>-Jdcloud-2.4g` 之类由 mac80211 生成），WPA2 密钥随机生成。第一次登录后可以在 LuCI 里自行修改，之后不会被任何脚本覆盖；密码可以在路由器上 `uci show wireless | grep key` 查。
+无线不做任何定制，完全走上游规则：首次启动时由 `/sbin/wifi config`（内部执行 `ucode /lib/wifi/mac80211.uc`）按硬件生成 `/etc/config/wireless`，三个 radio（2.4G / 5.2G / 5.8G）各自一套，默认 **SSID `OWRT`、WPA2-PSK（`psk2+ccmp`）、密码 `12345678`**。
+
+这三个值是上游 `package/network/config/wifi-scripts/files/lib/wifi/mac80211.uc` 里写死的兜底：
+
+```ucode
+set ${si}.ssid='${defaults?.ssid || 'OWRT'}'
+set ${si}.encryption='${defaults?.encryption || 'psk2+ccmp'}'
+set ${si}.key='${defaults?.key || '12345678'}'
+```
+
+只有 `/etc/board.json` 里带 `wlan.defaults.ssids` 时才会被覆盖，而 RE-CS-02 的板级脚本（`target/linux/qualcommax/ipq60xx/base-files/etc/board.d/02_network`）没有设置它，所以每次刷机都是这三个默认值。第一次登录后可以在 LuCI 里改，之后不会被任何脚本覆盖；当前值可以在路由器上 `uci show wireless | grep -E 'ssid|key'` 查。
 
 原先有一个首启脚本 `Files/RE-CS-02/etc/uci-defaults/99-niubialex-wireless` 会改 SSID 和密码，已删除：它在「无线还没就绪」时返回 1，而 `uci_apply_defaults` 只删除返回 0 的脚本，于是脚本被留下来每次启动重试；重试一旦成功，就会把用户改过的无线设置覆盖回默认值。
 
