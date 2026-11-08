@@ -59,11 +59,18 @@ FIX "theme-vantage" "$PACKAGE_PATH/luci-theme-vantage" sed -i \
 #  set ${si}.ssid='${defaults?.ssid || 'OWRT'}'
 #  set ${si}.encryption='${defaults?.encryption || 'psk2+ccmp'}'
 #  set ${si}.key='${defaults?.key || '12345678'}'
-#这里只替换 SSID 的兜底值，加密与密码保持上游默认。
+#这里替换 SSID 兜底值、国家码、信道和 HT 模式，加密与密码保持上游默认。
 #
-#频段后缀按硬件归属判定：SoC 内置 ath11k 一个 phy 供 2.4G + 5.2G 两个 band，
-#PCIe 上的那块 ath11k（DTS 里 pci17cb,1104）才是 5.8G，所以 phy.path 里带
-#pci 的按 5.8g 算。判据放在 band_name 转小写之后，此时它已是 2g / 5g。
+#取值来自设备实际备份（backup-alexWrt-2026-11-08 的 /etc/config/wireless）：
+#  radio1 2.4G  channel 5   HE40   （默认 20MHz 是被上游 width=20 写死的）
+#  radio0 5G    channel 161 HE80   SoC 内置 2x2
+#  radio2 5G    channel 36  HE160  PCIe 外挂 4x4
+#国家码三个 radio 都是 US，不是上游兜底的 CN。
+#
+#频段后缀跟着信道走：36 属 U-NII-1（5.2G），161 属 U-NII-3（5.8G）。PCIe 那块
+#接在 DTS 的 &pcie0（pci17cb,1104），path 里带 pci，跑的是 36 所以叫 5.2g；
+#SoC 内置 phy 同时供 2.4G 和 5.8G 两个 band。判据放在 band_name 转小写之后，
+#此时它已是 2g / 5g。
 #
 #铁律：这只改「默认值」，只在生成配置文件时生效。radio_exists() 会跳过已存在
 #的 radio，所以保留配置升级时用户自己改过的 SSID 不会被覆盖。当初删掉
@@ -87,11 +94,23 @@ if anchor not in src:
     sys.exit("mac80211.uc: band_name anchor not found")
 
 inject = (
-    "\n\t\tlet band_suffix = band_name;\n"
-    "\t\tif (band_name == '2g')\n"
+    "\n\t\tlet pci = (match(phy.path, /pci/) != null);\n"
+    "\t\tlet band_suffix = band_name;\n"
+    "\t\tif (band_name == '2g') {\n"
     "\t\t\tband_suffix = '2.4g';\n"
-    "\t\telse if (band_name == '5g')\n"
-    "\t\t\tband_suffix = (match(phy.path, /pci/) != null) ? '5.8g' : '5.2g';\n"
+    "\t\t\tchannel = 5;\n"
+    "\t\t\thtmode = 'HE40';\n"
+    "\t\t} else if (band_name == '5g') {\n"
+    "\t\t\tif (pci) {\n"
+    "\t\t\t\tband_suffix = '5.2g';\n"
+    "\t\t\t\tchannel = 36;\n"
+    "\t\t\t\thtmode = 'HE160';\n"
+    "\t\t\t} else {\n"
+    "\t\t\t\tband_suffix = '5.8g';\n"
+    "\t\t\t\tchannel = 161;\n"
+    "\t\t\t\thtmode = 'HE80';\n"
+    "\t\t\t}\n"
+    "\t\t}\n"
 )
 src = src.replace(anchor, anchor + inject, 1)
 
@@ -99,6 +118,12 @@ old = "set ${si}.ssid='${defaults?.ssid || 'OWRT'}'"
 new = "set ${si}.ssid='${defaults?.ssid || 'alexwrt-jdcloud-' + band_suffix}'"
 if old not in src:
     sys.exit("mac80211.uc: ssid fallback not found")
+src = src.replace(old, new, 1)
+
+old = "set ${s}.country='${country || 'CN'}'"
+new = "set ${s}.country='${country || 'US'}'"
+if old not in src:
+    sys.exit("mac80211.uc: country fallback not found")
 src = src.replace(old, new, 1)
 
 io.open(path, "w", encoding="utf-8", newline="\n").write(src)

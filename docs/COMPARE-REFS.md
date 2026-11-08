@@ -58,11 +58,12 @@
 | 主机名 | 按传参 | OpenWRT | OpenWRT | **alexwrt** |
 | 管理 IP | 按传参 | 192.168.100.1 | 192.168.100.1 | **192.168.88.1** |
 | WiFi 名 | 按传参 | OpenWRT | `OpenWRT-2.4G` / `OpenWRT-5G`（静态文件写死） | **`alexwrt-jdcloud-2.4g` / `-5.2g` / `-5.8g`** |
-| WiFi 密码 | 按传参 | 1234567890 | 1234567890 | **88888888** |
-| WiFi 设置方式 | sed 改 `mac80211.uc` | 同左 | **整份 `/etc/config/wireless` 覆盖** | **构建期补丁改 `mac80211.uc` 里 SSID 的兜底值** |
+| WiFi 密码 | 按传参 | 1234567890 | 1234567890 | **12345678** |
+| WiFi 信道 / HT | 按传参 | 自动 | 静态写死 | **2.4G 5/HE40、5.2G(PCIe) 36/HE160、5.8G(SoC) 161/HE80，国家码 US** |
+| WiFi 设置方式 | sed 改 `mac80211.uc` | 同左 | **整份 `/etc/config/wireless` 覆盖** | **构建期补丁改 `mac80211.uc` 的 SSID / 国家码 / 信道 / htmode 兜底值** |
 | 软件源 | 上游默认 | 上游默认 | **换成 NJU 镜像 + iStore 源**（`files/etc/apk/repositories.d/distfeeds.list`） | 上游默认 + NJU 追加（`customfeeds.list`） |
 
-WiFi 这一行的实现差异值得注意：ax6600.emmc 是"静态覆盖"，好处是绝对可控，坏处是上游改了无线默认值你就跟不上了；你用的是"首次启动脚本"，好处是兼容上游结构变化，坏处是脚本匹配逻辑依赖 `wifi-device` 的路径（比如 `*pci*` 判定）。
+WiFi 这一行的实现差异值得注意：ax6600.emmc 是"静态覆盖"，好处是绝对可控，坏处是上游改了无线默认值你就跟不上了；当前方案是"构建期改生成器兜底值"，既能钉住 SSID / 国家码 / 信道 / htmode，又不会在开机后覆盖用户配置（`radio_exists()` 会跳过已存在的 radio）。
 
 ### 2.3 应用清单
 
@@ -98,7 +99,7 @@ WiFi 这一行的实现差异值得注意：ax6600.emmc 是"静态覆盖"，好�
 - `usr/bin/export-router-state.sh`、`usr/bin/restore-package-list.sh` —— 手动诊断/备份脚本，不自启
 - `usr/share/alexwrt/*.md` —— 脚本说明
 
-早期那套 WiFi 首启脚本（`99-alexwrt-wireless`）和 `--disable-dns` 包装（`98-netbird-default-nodns`）已在 2026-11-08 全部删除。现在无线仍由上游 `/sbin/wifi config` 生成，只在构建期改 `mac80211.uc` 里 SSID 的兜底值，换成 `alexwrt-jdcloud-<频段>`，运行时不碰用户配置。
+早期那套 WiFi 首启脚本（`99-alexwrt-wireless`）和 `--disable-dns` 包装（`98-netbird-default-nodns`）已在 2026-11-08 全部删除。现在无线仍由上游 `/sbin/wifi config` 生成，只在构建期改 `mac80211.uc` 的兜底值：SSID 换成 `alexwrt-jdcloud-<频段>`，国家码 `US`，2.4G `5/HE40`、PCIe `36/HE160`、SoC 5G `161/HE80`，运行时不碰用户配置。
 
 ---
 

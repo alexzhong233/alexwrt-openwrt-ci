@@ -33,25 +33,24 @@
 
 ## Wi-Fi 默认值
 
-## Wi-Fi 默认值
+无线仍然走上游机制：首次启动时由 `/sbin/wifi config`（内部执行 `ucode /lib/wifi/mac80211.uc`）按硬件生成 `/etc/config/wireless`，三个 radio 各自一套。定制项是 SSID、国家码、信道和 HT 模式的兜底值，由 `Scripts/Handles.sh` 在构建期打补丁：
 
-无线仍然走上游机制：首次启动时由 `/sbin/wifi config`（内部执行 `ucode /lib/wifi/mac80211.uc`）按硬件生成 `/etc/config/wireless`，三个 radio 各自一套。唯一定制是 SSID 的兜底值，由 `Scripts/Handles.sh` 在构建期打补丁：
+| 频段 | 硬件 | 默认 SSID | 信道 | HT 模式 |
+|---|---|---|---|---|
+| 2.4 GHz | SoC 内置 ath11k | `alexwrt-jdcloud-2.4g` | 5 | HE40 |
+| 5.2 GHz | PCIe ath11k 4x4（DTS 里 `pci17cb,1104`） | `alexwrt-jdcloud-5.2g` | 36 | HE160 |
+| 5.8 GHz | SoC 内置 ath11k 2x2 | `alexwrt-jdcloud-5.8g` | 161 | HE80 |
 
-| 频段 | 硬件 | 默认 SSID |
-|---|---|---|
-| 2.4 GHz | SoC 内置 ath11k | `alexwrt-jdcloud-2.4g` |
-| 5.2 GHz | SoC 内置 ath11k | `alexwrt-jdcloud-5.2g` |
-| 5.8 GHz | PCIe ath11k（DTS 里 `pci17cb,1104`） | `alexwrt-jdcloud-5.8g` |
-
-加密 `psk2+ccmp`（WPA2-PSK）、密码 `12345678`、国家码 `CN` 都保持上游默认：
+国家码 `US`，加密 `psk2+ccmp`（WPA2-PSK），密码 `12345678`：
 
 ```ucode
 set ${si}.ssid='${defaults?.ssid || 'alexwrt-jdcloud-' + band_suffix}'
 set ${si}.encryption='${defaults?.encryption || 'psk2+ccmp'}'
 set ${si}.key='${defaults?.key || '12345678'}'
+set ${s}.country='${country || 'US'}'
 ```
 
-频段后缀靠 phy 路径判断：SoC 内置 phy 一个设备同时提供 2G/5G 两个 band，PCIe 那块才是 5.8G，所以 `match(phy.path, /pci/)` 命中即 `5.8g`。
+信道和 HT 模式是显式覆盖的：上游对 2G 固定 `width = 20`，对 5G 把 `max_width` 截到 80，所以 2.4G 的 HE40 和 PCIe 卡的 HE160 都必须在补丁里指定。频段后缀跟信道走——36 属 U-NII-1（5.2G），161 属 U-NII-3（5.8G）；PCIe 那块由 `match(phy.path, /pci/)` 识别，SoC 内置 phy 一个设备同时供 2.4G 和 5.8G 两个 band。
 
 **这个改动只影响“生成配置文件”那一刻。** `radio_exists()` 会跳过已经存在的 radio，所以保留配置升级时不会覆盖你改过的 SSID；只有全新刷机（或不保留配置）才会看到新默认值。当前值可以在路由器上 `uci show wireless | grep -E 'ssid|key'` 查。
 
