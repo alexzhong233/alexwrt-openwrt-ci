@@ -72,7 +72,7 @@ WiFi 这一行的实现差异值得注意：ax6600.emmc 是"静态覆盖"，好�
 | HomeProxy | `=y` | `=n` | `=m`（可装不预装） |
 | OpenClash | 无 | `=y` | `=y` |
 | PassWall / PassWall2 | 无 | 无 | `=y` / `=m` |
-| Dockerman + Docker | 无 | 无 | `=y`（dockerd、compose 全套） |
+| Dockerman + Docker | 无 | `=y`（dockerd、compose 全套） | `=y`（dockerd、compose 全套） |
 | 1Panel（istorepanel） | 无 | `luci-app-store` iStore | `=y` |
 | NetBird | 无 | 无 | `=y` |
 | OpenList / qBittorrent / Harbor File | 无 | 无 | `=y` |
@@ -83,23 +83,29 @@ WiFi 这一行的实现差异值得注意：ax6600.emmc 是"静态覆盖"，好�
 | athena-led | 无 | **显式 `=n` 关掉** | `=y`（从 577090447 的 LED 控制器仓库提取） |
 | mini-diskmanager | `=y` | `=n`（改用 diskman） | `=n`（改用 diskman） |
 
-你的固件本质上是一台**小型 NAS + 旁路由**：Docker、1Panel、OpenList、qBittorrent、Harbor 全在里面，再叠 PassWall/OpenClash/NetBird 三套网络方案。上游和 577090447 的固件都是"干净路由"，安装包体积会小很多，开机内存占用也低不少。
+你的固件本质上是一台**小型 NAS + 旁路由**：Docker、1Panel、OpenList、qBittorrent、Harbor 全在里面，再叠 PassWall/OpenClash/NetBird 三套网络方案。上游和 577090447 的固件都是"干净路由"（577090447 带 Docker 但除此之外没有 NAS 应用栈），安装包体积会小很多，开机内存占用也低不少。
 
 ### 2.4 你自己额外注入的东西
 
-`Files/RE-CS-02` 里的 12 个文件是另外三个仓库都没有的：
+`Files/RE-CS-02` 里的 11 个文件是另外三个仓库都没有的：
 
-- `etc/uci-defaults/99-niubialex-wireless` —— 首启按频段分 SSID（2.4G/5G/5G-Gaming）、设信道和 HE 模式
-- `etc/uci-defaults/98-netbird-default-nodns` —— 给 `netbird up` 默认加 `--disable-dns`，避免和 dnsmasq 抢 53
-- `etc/init.d/netbird-passwall-compat` —— 可选服务，补 PassWall 的 nftables 标记保护规则
-- 6 个 `usr/bin/netbird-*.sh` / `export-router-state.sh` / `restore-package-list.sh` —— 全是手动诊断/修复脚本，默认不自启
+- `etc/apk/repositories.d/customfeeds.list` —— 追加 NJU 镜像源（`distfeeds.list` 仍由 base-files 生成官方源）
+- `etc/uci-defaults/90-niubialex-compat` —— 建 `/etc/config/niubialex`（NetBird 兼容守护开关，默认 `off`）、写 sysupgrade 保留、对齐服务软链
+- `etc/uci-defaults/99-niubialex-legacy-cleanup` —— 撤掉旧的 `netbird` CLI 包装、清理废弃脚本与软链
+- `etc/init.d/netbird-passwall-compat-watch` —— 兼容守护服务（`watch` 模式才启用）
+- `usr/bin/netbird-compat-ctl` —— 守护的开关/状态/日志入口，LuCI「服务 → NetBird 工具」调它
+- `usr/bin/netbird-passwall-compat.sh` —— 规则实现本体（守护以 `--once` 调它）
+- `usr/bin/netbird-passwall-compat-watch.sh` —— 守护主循环
+- `usr/bin/export-router-state.sh`、`usr/bin/restore-package-list.sh` —— 手动诊断/备份脚本，不自启
 - `usr/share/niubiAlex/*.md` —— 脚本说明
+
+早期那套 WiFi 首启脚本（`99-niubialex-wireless`）和 `--disable-dns` 包装（`98-netbird-default-nodns`）已在 2026-11-08 全部删除，现在无线完全走上游 `/sbin/wifi config` 的默认规则。
 
 ---
 
 ## 3. 为什么坑都踩在你这边
 
-上游和 577090447 的固件里**没有 Docker、没有 vlmcsd、没有 OpenAppFilter、没有 NetBird**。你多引入的每一个自建包，都要自己保证它能过 `apk` 这一关：
+上游固件里**没有 Docker、没有 vlmcsd、没有 OpenAppFilter、没有 NetBird**（577090447 两个仓库的 `Config/GENERAL.txt` 都显式选了 `docker`/`dockerd`/`luci-app-dockerman`，`ax6600.emmc` 还带 `docker-compose`，所以它有 Docker；但它除 Docker 之外没有 NAS 应用栈）。你多引入的每一个自建包，都要自己保证它能过 `apk` 这一关：
 
 | 已踩过的坑 | 现象 | 根因 |
 |---|---|---|
