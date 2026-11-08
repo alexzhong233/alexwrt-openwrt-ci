@@ -1,7 +1,8 @@
 #!/bin/sh /etc/rc.common
 
-# 事件驱动版兼容规则守护。和 netbird-passwall-compat 二选一，
-# 不要同时启用：两者共用同一把补丁锁，轮询服务会占住它。
+# 事件驱动的 NetBird / PassWall 兼容规则守护，也是固件里唯一的兼容守护。
+# 实际的改规则实现放在 /usr/bin/netbird-passwall-compat.sh，本服务只负责
+# 用 nft monitor 监听事件并调度它（--once），那个脚本不再单独注册服务。
 #
 # 默认不运行。只有 /etc/config/niubialex 里显式写了
 #

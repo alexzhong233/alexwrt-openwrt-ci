@@ -1,30 +1,30 @@
 #!/bin/sh
 # SPDX-License-Identifier: MIT
 #
-# niubialex-netbird — NetBird 相关守护的查询与操作入口。
+# niubialex-netbird — NetBird 兼容守护的查询与操作入口。
 #
 # 只给 LuCI（luci-app-netbird-tools）调用，子命令走白名单，不接受任意 shell。
 # 之所以做成一个入口而不是让页面直接调 /etc/init.d/*，是因为 rpcd 的 file
 # 权限是按路径给的，路径越少越安全；参数校验放这里做。
-#
-# 用法：
-#   niubialex-netbird status                打印 key=value 状态
-#   niubialex-netbird mode off|watch|poll   切换守护模式（同时只保留一个）
-#   niubialex-netbird watchdog <秒>         兜底检查间隔
-#   niubialex-netbird interval <秒>         轮询间隔
-#   niubialex-netbird once                  立即补一次兼容规则
-#   niubialex-netbird netbird-restart       重启 netbird，重建 wt0 转发规则
-#   niubialex-netbird diagnose              跑一次共存诊断脚本
-#   niubialex-netbird log                   最近 60 行 netbird 相关日志
 
 set -u
 
-COMPAT_SVC="netbird-passwall-compat"
 WATCH_SVC="netbird-passwall-compat-watch"
-COMPAT_BIN="/usr/bin/netbird-passwall-compat.sh"
 WATCH_BIN="/usr/bin/netbird-passwall-compat-watch.sh"
-DIAG_BIN="/usr/bin/netbird-passwall-diagnose.sh"
+APPLY_BIN="/usr/bin/netbird-passwall-compat.sh"
 CFG="niubialex.compat"
+
+usage() {
+	cat <<'EOF'
+用法：
+  niubialex-netbird status                 打印 key=value 状态
+  niubialex-netbird mode off|watch         切换守护模式
+  niubialex-netbird watchdog <秒>          兜底检查间隔，0 关闭
+  niubialex-netbird once                   立即补一次兼容规则
+  niubialex-netbird netbird-restart        重启 netbird，重建 wt0 转发规则
+  niubialex-netbird log                    最近 60 行 netbird 相关日志
+EOF
+}
 
 is_enabled() {
 	local f
@@ -56,11 +56,11 @@ get_opt() {
 }
 
 do_status() {
-	local mode watchdog interval wt0 wt0_rules compat_rules state ip networks nb
+	local mode watchdog wt0 wt0_rules compat_rules state ip networks nb
+	local nb_en nb_run w_en
 
 	mode=$(get_opt mode off)
 	watchdog=$(get_opt watchdog 60)
-	interval=$(get_opt interval 30)
 
 	if is_enabled netbird; then nb_en=1; else nb_en=0; fi
 	if is_running "/usr/libexec/netbird-real service run" || is_running "netbird"; then
@@ -69,8 +69,8 @@ do_status() {
 		nb_run=0
 	fi
 
-	# netbird CLI 每次都走一次 unix socket，页面每 5 秒刷新一次，
-	# 分开调三次等于一分钟几十次往返。只取一次再解析。
+	# netbird CLI 每次都要走一次 unix socket，页面会定期刷新，
+	# 分开调三次等于几十次往返。只取一次再解析。
 	nb=$(netbird status 2>/dev/null)
 	state=$(printf '%s\n' "$nb" | sed -n 's/^Management: *//p' | head -n1)
 	ip=$(printf '%s\n' "$nb" | sed -n 's/^NetBird IP: *//p' | head -n1)
@@ -81,20 +81,16 @@ do_status() {
 	wt0_rules=$(nft list chain inet fw4 forward 2>/dev/null | grep -c 'wt0')
 	compat_rules=$(nft list ruleset 2>/dev/null | grep -c 'PW-NB-COMPAT')
 
-	if is_enabled "$COMPAT_SVC"; then c_en=1; else c_en=0; fi
 	if is_enabled "$WATCH_SVC"; then w_en=1; else w_en=0; fi
 
 	cat <<EOF
 mode=$mode
 watchdog=$watchdog
-interval=$interval
 netbird_enabled=$nb_en
 netbird_running=$nb_run
 netbird_state=${state:-unknown}
 netbird_ip=${ip:-}
 networks=${networks:-}
-compat_enabled=$c_en
-compat_running=$(proc_count "$COMPAT_BIN")
 watch_enabled=$w_en
 watch_running=$(proc_count "$WATCH_BIN")
 wt0=$wt0
@@ -108,9 +104,9 @@ set_mode() {
 	mode="${1:-}"
 
 	case "$mode" in
-	off | watch | poll) ;;
+	off | watch) ;;
 	*)
-		echo "无效模式：$mode（只接受 off / watch / poll）" >&2
+		echo "无效模式：$mode（只接受 off / watch）" >&2
 		return 1
 		;;
 	esac
@@ -124,22 +120,14 @@ set_mode() {
 		return 1
 	}
 
-	# 两个服务互斥，先把两边都停干净再按模式起一个。
-	/etc/init.d/$COMPAT_SVC stop >/dev/null 2>&1
+	# 先停干净再按模式决定是否启用，避免留下上一次的实例。
 	/etc/init.d/$WATCH_SVC stop >/dev/null 2>&1
-	/etc/init.d/$COMPAT_SVC disable >/dev/null 2>&1
 	/etc/init.d/$WATCH_SVC disable >/dev/null 2>&1
 
-	case "$mode" in
-	watch)
+	if [ "$mode" = "watch" ]; then
 		/etc/init.d/$WATCH_SVC enable >/dev/null 2>&1
 		/etc/init.d/$WATCH_SVC start >/dev/null 2>&1
-		;;
-	poll)
-		/etc/init.d/$COMPAT_SVC enable >/dev/null 2>&1
-		/etc/init.d/$COMPAT_SVC start >/dev/null 2>&1
-		;;
-	esac
+	fi
 
 	echo "模式已切换为 $mode"
 }
@@ -162,10 +150,9 @@ set_number() {
 	echo "$label 已设为 $value"
 
 	# 正在跑的服务要重启才能读到新间隔
-	case "$(get_opt mode off)" in
-	watch) /etc/init.d/$WATCH_SVC restart >/dev/null 2>&1 ;;
-	poll) /etc/init.d/$COMPAT_SVC restart >/dev/null 2>&1 ;;
-	esac
+	if [ "$(get_opt mode off)" = "watch" ]; then
+		/etc/init.d/$WATCH_SVC restart >/dev/null 2>&1
+	fi
 }
 
 case "${1:-}" in
@@ -178,16 +165,13 @@ mode)
 watchdog)
 	set_number watchdog "兜底间隔" "${2:-}"
 	;;
-interval)
-	set_number interval "轮询间隔" "${2:-}"
-	;;
 once)
-	[ -x "$COMPAT_BIN" ] || {
-		echo "找不到 $COMPAT_BIN" >&2
+	[ -x "$APPLY_BIN" ] || {
+		echo "找不到 $APPLY_BIN" >&2
 		exit 1
 	}
 	echo "执行一次兼容规则检查..."
-	if "$COMPAT_BIN" --once; then
+	if "$APPLY_BIN" --once; then
 		echo "完成。当前兼容规则条数：$(nft list ruleset 2>/dev/null | grep -c 'PW-NB-COMPAT')"
 	else
 		echo "执行失败（退出码 $?）" >&2
@@ -200,22 +184,15 @@ netbird-restart)
 	sleep 6
 	echo "wt0 转发规则：$(nft list chain inet fw4 forward 2>/dev/null | grep -c 'wt0') 条"
 	;;
-diagnose)
-	[ -x "$DIAG_BIN" ] || {
-		echo "找不到 $DIAG_BIN" >&2
-		exit 1
-	}
-	"$DIAG_BIN"
-	;;
 log)
 	logread -e netbird 2>/dev/null | tail -n 60
 	;;
 '' | help | --help | -h)
-	sed -n '4,20p' "$0" | sed 's/^# \{0,1\}//'
+	usage
 	;;
 *)
 	echo "未知子命令：$1" >&2
-	echo "可用：status mode watchdog interval once netbird-restart diagnose log" >&2
+	echo "可用：status mode watchdog once netbird-restart log" >&2
 	exit 1
 	;;
 esac

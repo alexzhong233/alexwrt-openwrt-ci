@@ -1,0 +1,49 @@
+# 备份：已从固件移除的 NetBird 辅助脚本
+
+这里的文件曾经通过 `Files/RE-CS-02/` 打进固件，2026-11-08 起全部移出。目录结构保持原样，方便对照路径或整段恢复。
+
+`Files/RE-CS-02/` 是构建时唯一被拷进固件的目录，所以放在仓库根 `backup/` 下的这些文件不会被编进固件。
+
+## 为什么移除
+
+1. **`netbird up` 的 `--disable-dns` 包装器**是早期为了绕开 PassWall 抢 DNS 加的。它把真身挪到 `/usr/libexec/netbird-real`，再在 `/usr/bin/netbird` 放一个 shell 包装。副作用是 LuCI 的 NetBird 页面所有 `up` 操作都被迫带 `--disable-dns`，不再是上游行为。现在改回原生 CLI，DNS 交给 NetBird 自己按配置处理。
+
+2. **轮询服务**（`netbird-passwall-compat` + 对应的 init）和事件版长期并存，两者共用同一把补丁锁，同时开等于互相抵消。现在只保留事件驱动的 `netbird-passwall-compat-watch`。注意：**`netbird-passwall-compat.sh` 本身没有移除**，它是 watch 的执行核心，仍在 `Files/RE-CS-02/usr/bin/` 里。
+
+3. **DNS / LAN / 诊断三个修复脚本**是针对当时特定故障的一次性工具，问题定位清楚后不再需要。
+
+## 文件清单
+
+| 文件 | 用途 |
+|---|---|
+| `etc/uci-defaults/98-netbird-default-nodns` | 首次启动把 `/usr/bin/netbird` 换成自动追加 `--disable-dns` 的包装器 |
+| `etc/init.d/netbird-passwall-compat` | 轮询版兼容服务的 procd 文件 |
+| `usr/bin/netbird-dns-guard.sh` | 检查 / 切换 NetBird DNS（`apply` 会用 `netbird up --disable-dns`） |
+| `usr/bin/netbird-dnsmasq-wt0-fix.sh` | 解决 dnsmasq 与 `wt0` 抢 53 端口（加 `except-interface=wt0`） |
+| `usr/bin/netbird-passwall-diagnose.sh` | 一次性收集 NetBird / PassWall / DNS / 路由 / 防火墙状态 |
+| `usr/bin/netbird-passwall-lan-fix.sh` | 检查 / 创建 NetBird 的防火墙 zone 与转发规则 |
+
+`netbird-passwall-compat.sh` 曾被短暂移到这里，现已放回 `Files/RE-CS-02/usr/bin/`，不在本目录。
+
+## 怎么恢复
+
+想让某个脚本回到固件，移回去再编译即可：
+
+```sh
+git mv backup/netbird-legacy/usr/bin/netbird-dns-guard.sh \
+       Files/RE-CS-02/usr/bin/netbird-dns-guard.sh
+```
+
+恢复轮询服务还要同时把 `etc/init.d/netbird-passwall-compat` 放回，并在 `/etc/config/niubialex` 里补一个对应模式——当前的 `mode` 只认 `off` / `watch`。
+
+## 设备侧注意
+
+已经刷过含 `98-netbird-default-nodns` 的固件，`/usr/bin/netbird` 是包装脚本、真身在 `/usr/libexec/netbird-real`。新固件的 `99-niubialex-netbird` 会把它反向恢复（真身覆盖回 `/usr/bin/netbird`，然后删掉中间文件），同时清理上表里除 `98-*` 之外的残留副本和 `/etc/rc.d` 开机软链接。
+
+如果不想等新固件，可以手动执行：
+
+```sh
+cp -f /usr/libexec/netbird-real /usr/bin/netbird && chmod 755 /usr/bin/netbird
+rm -f /usr/libexec/netbird-real
+netbird status
+```

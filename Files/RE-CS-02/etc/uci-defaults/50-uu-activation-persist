@@ -1,0 +1,25 @@
+#!/bin/sh
+# SPDX-License-Identifier: MIT
+#
+# 首次开机把 uu-activation-persist 挂上开机自启，并把 /etc/uu 加进
+# sysupgrade 保留列表——否则重刷一次固件，已保存的注册记录又没了，
+# "正在注册"这个假象会跟着回来。
+#
+# 幂等：重复执行没有副作用；任何一步失败都不影响启动，返回 0，
+# 免得被 uci_apply_defaults 留在原地反复重跑。
+
+[ -x /usr/bin/uu-activation-persist.sh ] || exit 0
+[ -f /etc/config/uuplugin ] || exit 0
+
+touch /etc/sysupgrade.conf
+grep -qxF '/etc/uu' /etc/sysupgrade.conf 2>/dev/null || \
+	echo '/etc/uu' >>/etc/sysupgrade.conf
+
+/etc/init.d/uu-activation-persist enable >/dev/null 2>&1
+
+# 只在 UU 已启用时立刻拉起，否则等用户打开开关后由 uci 触发。
+if [ "$(uci -q get uuplugin.@uuplugin[0].enabled 2>/dev/null)" = "1" ]; then
+	/etc/init.d/uu-activation-persist start >/dev/null 2>&1
+fi
+
+exit 0

@@ -48,7 +48,7 @@ return view.extend({
 	},
 
 	buildRows: function(st) {
-		var running = (parseInt(st.compat_running || '0', 10) + parseInt(st.watch_running || '0', 10));
+		var running = parseInt(st.watch_running || '0', 10);
 		var wt0Rules = parseInt(st.wt0_rules || '0', 10);
 		var compatRules = parseInt(st.compat_rules || '0', 10);
 
@@ -72,9 +72,9 @@ return view.extend({
 			row(_('wt0 隧道接口'), badge(flag(st.wt0), _('存在'), _('缺失'))),
 			row(_('wt0 转发规则'), badge(wt0Rules > 0,
 				wt0Rules + ' ' + _('条'), _('0 条，远端进不来内网'))),
-			row(_('兼容守护模式'), plain(st.mode === 'off'
-				? _('off（关闭，推荐保持）')
-				: (st.mode === 'watch' ? _('watch（事件驱动）') : _('poll（30 秒轮询）')))),
+			row(_('兼容守护模式'), plain(st.mode === 'watch'
+				? _('watch（事件驱动）')
+				: _('off（关闭，推荐保持）'))),
 			row(_('守护进程数'), badge(running <= 1,
 				running > 0 ? String(running) : _('0，未运行'),
 				running + ' ' + _('个，存在遗留进程'))),
@@ -125,11 +125,10 @@ return view.extend({
 			'style': 'min-width:16rem'
 		}, [
 			E('option', { 'value': 'off' }, [ _('off — 关闭（默认）') ]),
-			E('option', { 'value': 'watch' }, [ _('watch — 事件驱动（推荐）') ]),
-			E('option', { 'value': 'poll' }, [ _('poll — 30 秒轮询') ])
+			E('option', { 'value': 'watch' }, [ _('watch — 事件驱动（推荐）') ])
 		]);
 
-		modeSel.value = (st.mode === 'watch' || st.mode === 'poll') ? st.mode : 'off';
+		modeSel.value = (st.mode === 'watch') ? 'watch' : 'off';
 
 		var btnMode = E('button', {
 			'class': 'btn cbi-button cbi-button-apply',
@@ -172,7 +171,7 @@ return view.extend({
 					btnMode
 				]),
 				E('div', { 'class': 'cbi-map-descr', 'style': 'margin-top:.5rem' }, [
-					_('两个守护互斥，切换时会自动停掉另一个。watch 更省资源，poll 是旧行为；确认不用 PassWall 就选 off。')
+					_('只有 watch 一种守护：事件驱动，NetBird 重建规则时立即补回，另有兜底定时检查。不用 PassWall 就保持 off。')
 				])
 			]),
 
@@ -181,7 +180,6 @@ return view.extend({
 				E('div', {}, [
 					actionButton(_('立即补一次规则'), [ 'once' ]),
 					actionButton(_('重建 wt0 转发'), [ 'netbird-restart' ]),
-					actionButton(_('运行诊断'), [ 'diagnose' ]),
 					actionButton(_('查看日志'), [ 'log' ])
 				]),
 				out

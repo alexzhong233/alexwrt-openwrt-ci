@@ -54,7 +54,7 @@
 - NSS：`nss-firmware`、`kmod-nss-wifi-drv`、`ATH11K_NSS_WIFI` 与 ath11k/mac80211 NSS 补丁都来自上游源码；自建状态页 `luci-app-nss-status` 在“状态 -> NSS 卸载”，直接读 `nss-wifi-drv` 的 debugfs 显示加速状态、各 vdev 收发计数和流表，不含驱动，不负责开启 NSS。
 - 默认进 rootfs：NetBird、PassWall、OpenClash、Dockerman。HomeProxy 和 PassWall2 只编译为可安装模块。
 - 不进固件：ZeroTier、易有云文件管理器。WorkBuddy2API 本体与 `luci-app-workbuddy2api` 已内置，页面在“服务 -> WorkBuddy2API”。
-- 首次启动会为 `netbird up` 安装默认禁用 DNS 的包装器，`netbird up --disable-dns=false` 可恢复。
+- NetBird 使用原生 CLI，`netbird up` 不做任何参数包装，行为由 LuCI 的 NetBird 页面决定。
 
 软件包在 CI 里由 `Scripts/Packages.sh` 下载进编译树，仓库不保存编译好的 `.ipk`。脚本装到 `/usr/bin/`，说明文档装到 `/usr/share/niubiAlex/`，都不注册为常驻服务。逐包核对见 [docs/SOFTWARE-AUDIT.md](docs/SOFTWARE-AUDIT.md)。
 
@@ -66,92 +66,38 @@
 
 ## 脚本
 
-固件里的脚本都在 `/usr/bin/`，**默认不启动、不 enable**，只在明确执行命令后才检查或修改配置。遇到问题时先跑诊断，再按结果选修复脚本，不要为了“预防”把它们全部跑一遍。
+固件里的脚本都在 `/usr/bin/`，默认不启动。NetBird 兼容守护由 `/etc/config/niubialex` 的 `mode` 显式开关（默认 `off`），其他脚本只在明确执行命令后才检查或修改配置。
 
-推荐顺序：`netbird-passwall-diagnose.sh` → `netbird-dns-guard.sh check` → 确认需要才 `apply` → `netbird-passwall-lan-fix.sh check` → 看过备份再做 `apply` → 升级前 `export-router-state.sh`。
+### NetBird 兼容守护
 
-### netbird-passwall-compat.sh
+`netbird-passwall-compat-watch` 是固件里唯一的常驻守护：用 `nft monitor` 订阅 nftables 规则变更，NetBird 重建 prerouting 链后立即补回 PassWall 的 mark 豁免；另有 60 秒兜底检查，因为 netlink 缓冲溢出（ENOBUFS）会静默丢事件。
 
-处理 NetBird 原生 nftables 链与 PassWall 标记规则的冲突。动态查找 PassWall 当前的 `meta mark set` 值和 NetBird 的 prerouting 链，不写死 mark；自动发现失败时可以用 `PASSWALL_MARK=0x...` 指定。
-
-单次检查并在缺失时补规则：
+改规则的实现放在 `/usr/bin/netbird-passwall-compat.sh`，由守护以 `--once` 调用，也可以手动单次执行；它不再单独注册 procd 服务——早先的轮询服务与事件守护共用同一把补丁锁，同时开等于互相抵消，已移除。
 
 ```sh
-/usr/bin/netbird-passwall-compat.sh --once
+/usr/bin/niubialex-netbird status        # 当前模式、进程数、wt0 规则数
+/usr/bin/niubialex-netbird mode watch    # 启用事件守护
+/usr/bin/niubialex-netbird mode off      # 关闭（默认）
+/usr/bin/niubialex-netbird watchdog 60   # 兜底间隔，0 关闭
 ```
 
-确认输出的 mark 和链就是当前规则后，可以注册为 procd 服务。默认 30 秒检查一次，只在规则缺失或 mark 变化时补回，不重复插入，也不会重启 NetBird、PassWall 或路由器。检查的是**规则位置**而不只是"存在"——这条 `return` 必须排在会改写 mark 的规则之前，一旦被挤到后面就删掉重插到第一位，并写一条日志：
+LuCI 里是「服务 → NetBird 工具」，能看状态、切模式、立即补一次规则、重建 wt0 转发、查日志。
 
-```sh
-/etc/init.d/netbird-passwall-compat enable
-/etc/init.d/netbird-passwall-compat start
-/etc/init.d/netbird-passwall-compat status
-```
+`wt0` 的两条转发规则由 NetBird 运行时插进 `inet fw4`，执行 `/etc/init.d/firewall restart` 会被冲掉，之后 `/etc/init.d/netbird restart` 即可恢复。
 
-临时提高频率：`INTERVAL=10 /etc/init.d/netbird-passwall-compat restart`；单次检查也可以用 `INTERVAL=5 /usr/bin/netbird-passwall-compat.sh --once`。停止用 `disable` + `stop`。之前用 `nohup` 起过旧进程的话，先执行一次 `pkill -f '[n]etbird-passwall-compat.sh'`，避免手动进程和 procd 同时运行。
-
-### netbird-passwall-compat-watch.sh
-
-同一套规则改成事件驱动：用 `nft monitor` 订阅 nftables 的规则变更，NetBird 一重建 prerouting 链就立即补回，恢复时间从“最多一个轮询周期”降到毫秒级。规则发现和插入仍由 `netbird-passwall-compat.sh --once` 完成，只有一份实现。
-
-**和 `netbird-passwall-compat` 二选一，不能同时启用。** 轮询服务在整个生命周期内持有同一把补丁锁，事件补回会被锁挡成空操作（脚本启动时会检测并写警告）。
-
-```sh
-/etc/init.d/netbird-passwall-compat disable
-/etc/init.d/netbird-passwall-compat stop
-/etc/init.d/netbird-passwall-compat-watch enable
-/etc/init.d/netbird-passwall-compat-watch start
-```
-
-`enable` 只需要执行一次：它生成 `/etc/rc.d` 下的开机软链，之后每次开机 procd 自动拉起，`sysupgrade` 升级也保留。只 `enable` 不 `start` 的话本次开机不生效、下次重启才生效；不 `enable` 就永远不会自动运行。固件不做首启自动启用。
-
-事件不能作为唯一依据：netlink 接收缓冲溢出（ENOBUFS）时会**静默丢事件**，所以默认保留 60 秒兜底检查，`WATCHDOG=0` 关闭、`WATCHDOG=120` 放宽。monitor 意外退出时会先全量校验一次再按指数退避重连。
-
-开服务前先在本机验证事件延迟：
-
-```sh
-/usr/bin/netbird-passwall-compat-watch.sh --test
-```
-
-另开一个窗口增删一条规则，看打印出来的时间戳。如果事件明显滞后，说明 `nft monitor` 的 stdout 在管道里是全缓冲，装上 `coreutils-stdbuf` 后脚本会自动用它强制行缓冲。
-
-单一实例由 `/var/run/netbird-passwall-compat-watch.lock` 保证；`stop` 没有清理干净的锁会在下次启动时按 PID 自动回收。
-
-### netbird-dnsmasq-wt0-fix.sh
-
-处理 NetBird `wt0` 抢占 53 端口、导致 dnsmasq 起不来的问题。只在 `dnsmasq` 未运行、`192.168.88.1:53` 无监听、且确认 `100.111.128.51:53` 被 NetBird 占用时使用。dnsmasq 本来正常时不要运行。
-
-```sh
-/usr/bin/netbird-dnsmasq-wt0-fix.sh check
-/usr/bin/netbird-dnsmasq-wt0-fix.sh apply
-```
-
-`apply` 会备份 `/etc/dnsmasq.conf`、加入 `except-interface=wt0` 再重启 dnsmasq。回滚：
-
-```sh
-/usr/bin/netbird-dnsmasq-wt0-fix.sh rollback /root/dnsmasq-netbird-backups/<备份文件>
-```
-
-### 其他脚本
+### 升级辅助
 
 | 脚本 | 作用 |
 |---|---|
-| `netbird-passwall-diagnose.sh` | 收集 NetBird、PassWall、DNS、路由、防火墙和 NSS 状态，不改配置 |
-| `netbird-dns-guard.sh` | `check` 查 DNS 状态；`apply` 禁用 NetBird DNS 并重启 dnsmasq；`restore` 恢复 |
-| `netbird-passwall-lan-fix.sh` | `check` / `apply` / `rollback`，管理 NetBird 网络与防火墙区域、转发规则 |
 | `export-router-state.sh` | 升级前导出软件包清单、UCI 配置、服务状态和脚本；默认按键名和值特征启发式脱敏，`INCLUDE_SECRETS=1` 才原样导出 |
 | `restore-package-list.sh` | 按清单重装软件包，不恢复配置、Docker 卷、证书和令牌 |
 
-常用命令：
-
 ```sh
-/usr/bin/netbird-passwall-diagnose.sh /tmp/netbird-check
-/usr/bin/netbird-dns-guard.sh check
-/usr/bin/netbird-passwall-lan-fix.sh check
 /usr/bin/export-router-state.sh /tmp/router-export-before-upgrade
 ```
 
-修改配置类操作都必须显式使用 `apply`、`restore` 或 `rollback`。
+早期版本提供的 `netbird up --disable-dns` 包装器、`netbird-dns-guard.sh`、`netbird-dnsmasq-wt0-fix.sh`、`netbird-passwall-diagnose.sh` 和 `netbird-passwall-lan-fix.sh` 已移出固件，源码保留在 [backup/netbird-legacy/](backup/netbird-legacy/)。
+
 
 ## 目录
 
