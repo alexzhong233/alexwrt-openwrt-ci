@@ -314,13 +314,17 @@ return view.extend({
 		rowsVdev(data[1], parseVdevs(data[1]));
 		rowsFlow(parseFlows(data[2]));
 
-		var th = function(t) { return E('th', { 'class': 'th' }, [ t ]); };
+		/* 对齐类（center/right）LuCI 主题对 th、td 都生效，表头必须与数据列一致。 */
+		var th = function(t, align) {
+			return E('th', { 'class': 'th' + (align ? ' ' + align : '') }, [ t ]);
+		};
 
 		var vdevTable = E('table', { 'class': 'table' }, [
 			E('thead', {}, [
 				E('tr', { 'class': 'tr table-titles' }, [
-					th('接口号'), th('收包'), th('收字节'), th('发包'),
-					th('例外'), th('丢弃'), th('Ring 满')
+					th('接口号', 'center'), th('收包', 'right'), th('收字节', 'right'),
+					th('发包', 'right'), th('例外', 'right'), th('丢弃', 'right'),
+					th('Ring 满', 'right')
 				])
 			]),
 			vdevBody
@@ -329,7 +333,7 @@ return view.extend({
 		var flowTable = E('table', { 'class': 'table' }, [
 			E('thead', {}, [
 				E('tr', { 'class': 'tr table-titles' }, [
-					th('节点'), th('收包'), th('发包'), th('丢弃')
+					th('节点'), th('收包', 'right'), th('发包', 'right'), th('丢弃', 'right')
 				])
 			]),
 			flowBody
