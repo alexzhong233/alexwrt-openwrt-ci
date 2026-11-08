@@ -161,7 +161,7 @@ RELOCATE_MENU() {
 	#-L 不能省：改用官方 feeds 的包，ROOT 是 feeds install 建出来的符号链接
 	#（./package/feeds/<feed>/<name> -> ../../feeds/<feed>/applications/<name>），
 	#find 默认不下降「起始点本身是符号链接」的目录，会扫出 0 个文件并且一声不响
-	#地跳过改写 —— 之前 openlist / qbittorrent 的菜单就因此一直留在「服务」里。
+	#地跳过改写 —— 之前 openlist2 / qbittorrent 的菜单就因此一直留在「服务」里。
 	for F in $(find -L "$ROOT" -type f -path '*/menu.d/*.json' 2>/dev/null); do
 		sed -i "s#\"$OLD#\"$NEW#g" "$F" && CNT=$((CNT + 1))
 	done
@@ -174,11 +174,10 @@ RELOCATE_MENU() {
 
 RELOCATE_MENU "netbird" "$PACKAGE_PATH/luci-app-netbird" \
 	"admin/services/netbird" "admin/vpn/netbird"
-#openlist 换成官方 feeds 版（原 sbwml 的 luci-app-openlist2），菜单键从
-#admin/services/openlist 搬到「NAS」；父键是子键前缀，一次替换覆盖两页。
-OPENLIST_DIR=$(PKG_DIR luci-app-openlist) || OPENLIST_DIR=""
-RELOCATE_MENU "openlist" "$OPENLIST_DIR" \
-	"admin/services/openlist" "admin/nas/openlist"
+#openlist2（sbwml）的菜单键是 admin/services/openlist2，父键是子键前缀，
+#一次替换覆盖「设置」和「日志」两个子页。
+RELOCATE_MENU "openlist2" "$PACKAGE_PATH/luci-app-openlist2" \
+	"admin/services/openlist2" "admin/nas/openlist2"
 QBITTORRENT_DIR=$(PKG_DIR luci-app-qbittorrent) || QBITTORRENT_DIR=""
 RELOCATE_MENU "qbittorrent" "$QBITTORRENT_DIR" \
 	"admin/services/qbittorrent" "admin/nas/qbittorrent"
@@ -193,34 +192,16 @@ RELOCATE_MENU "natmapt" "$PACKAGE_PATH/luci-app-natmapt" \
 	"admin/services/natmap" "admin/network/natmap"
 
 #VPN 三个 Lua 界面：passwall / openclash / uu 加速器
-#passwall 和 openclash 现在来自官方 luci feed，路径经 PKG_DIR 解析；官方版的
-#controller 里仍是 entry({"admin", "services", ...})，替换规则和以前一样。
-PASSWALL_DIR=$(PKG_DIR luci-app-passwall) || PASSWALL_DIR=""
-PASSWALL_CTRL="$PASSWALL_DIR/luasrc/controller/passwall.lua"
-if [ -f "$PASSWALL_CTRL" ]; then
-	echo " "
-	if sed -i 's#"admin", "services", appname#"admin", "vpn", appname#g' "$PASSWALL_CTRL"; then
-		echo "menu: passwall -> admin/vpn (lua)"
-	fi
-fi
-
-OPENCLASH_DIR=$(PKG_DIR luci-app-openclash) || OPENCLASH_DIR=""
-OPENCLASH_CTRL="$OPENCLASH_DIR/luasrc/controller/openclash.lua"
-if [ -f "$OPENCLASH_CTRL" ]; then
-	echo " "
-	if sed -i 's#"admin", "services", "openclash"#"admin", "vpn", "openclash"#g' "$OPENCLASH_CTRL"; then
-		echo "menu: openclash -> admin/vpn (lua)"
-	fi
-fi
-
-UUGAME_CTRL=$(find "$PACKAGE_PATH" -maxdepth 6 -type f \
-	-path '*luci-app-uugamebooster*/luasrc/controller/uuplugin.lua' 2>/dev/null | head -1)
-if [ -n "$UUGAME_CTRL" ]; then
-	echo " "
-	if sed -i 's#"admin", "services", "uuplugin"#"admin", "vpn", "uuplugin"#g' "$UUGAME_CTRL"; then
-		echo "menu: uugamebooster -> admin/vpn (lua)"
-	fi
-fi
+#
+#这三个刻意留在「服务」里，不做迁移。原因是它们不只是菜单路径写在控制器里，
+#还把 admin/services/<自己> 硬编码进页面内的链接和 AJAX：
+#  · passwall 的 api.url() 是状态轮询、日志窗口、节点跳转、备份恢复共用的
+#    URL 生成器（luasrc/passwall/api.lua 里 string.format("admin/services/%s",
+#    appname)），只搬菜单的话整页 AJAX 全 404；
+#  · openclash 有 90 处引用散在 36 个文件，含保存后的 DISP.build_url 跳转和
+#    <script src> 里的 translate_js；
+#  · uu 加速器状态页模板用 url([[admin]], [[services]], [[uuplugin]], [[status]])。
+#改别人的代码容易在上游更新时静默失效，所以统一按上游位置放，不折腾。
 
 #修复 luci-app-uugamebooster 打包期 postinst 失败
 #

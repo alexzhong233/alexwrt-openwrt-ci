@@ -344,17 +344,10 @@ UPDATE_PACKAGE "diskmanager" "4IceG/luci-app-mini-diskmanager" "main"
 UPDATE_PACKAGE "mosdns" "sbwml/luci-app-mosdns" "v5" "" "v2dat"
 UPDATE_PACKAGE "uugamebooster" "xiaodoudou/luci-app-uugamebooster" "master" "pkg"
 UPDATE_PACKAGE "quickfile" "sbwml/luci-app-quickfile" "main"
-# OpenList 用官方 feeds 的 openlist + luci-app-openlist（immortalwrt/packages 维护，
-# Tianling Shen）。sbwml 的 luci-app-openlist2 就是同一个项目改名（2025-07-18
-# "repo: rename to openlist2"），编的是同一份 OpenList 源码、同一个 tarball，
-# 差别只在开官方包：前端用 dist（完整）而不是 dist-lite。
-#
-# 换包需要迁移的东西（新包不会自动搬，官方 99-migrate-openlist 只认 alist）：
-#   · 二进制   /usr/bin/openlist2        -> /usr/bin/openlist
-#   · UCI 段   /etc/config/openlist2     -> /etc/config/openlist（字段名也变了，
-#              port -> listen_http_port，data_dir 没有对应项，官方写死 /etc/openlist）
-#   · 数据     /etc/openlist2/data.db    -> /etc/openlist/data.db
-# 数据的搬迁由 Files/RE-CS-02/etc/uci-defaults/95-alexwrt-openlist-migrate 负责。
+# OpenList 用 sbwml 的 luci-app-openlist2：仓库顶层同时带 openlist2（二进制与
+# init）和 luci-app-openlist2（界面），整个 clone 进 package/ 即可，不需要 feeds。
+# 数据目录 /etc/openlist2，UCI 段名 openlist2，菜单由 Handles.sh 搬到「NAS」。
+UPDATE_PACKAGE "openlist2" "sbwml/luci-app-openlist2" "main"
 
 # 当前路由器使用的 SysTools 来自 LinkEase 应用扩展仓库。
 UPDATE_PACKAGE "systools" "linkease/openwrt-app-actions" "main" "pkg"
@@ -406,14 +399,14 @@ UPDATE_PACKAGE "mt5700m" "LianXia233/luci-app-mt5700m" "main"
 UPDATE_PACKAGE "netmonitor" "LianXia233/luci-app-netmonitor" "main"
 UPDATE_PACKAGE "qmodem-generic" "LianXia233/luci-app-qmodem-generic" "main"
 
-# 改用官方 feeds 的包（openclash / passwall / openlist / diskman / qbittorrent /
+# 改用官方 feeds 的包（openclash / passwall / diskman / qbittorrent /
 # vlmcsd / sing-box）。
 #
 # 它们不在上面的自建包清单里，所以 WRT-CORE 的 "Verify Package Selection" 只会
 # 报 warning 而不会失败；feeds update/install 出问题时，make defconfig 会静默
 # 丢掉对应的 CONFIG_PACKAGE_* 行，最后产出一个"构建成功但少了代理页/网盘页"的
 # 固件。这里显式检查一次，缺了就中断。
-for FEED_PKG in luci-app-openclash luci-app-passwall luci-app-openlist openlist \
+for FEED_PKG in luci-app-openclash luci-app-passwall \
 	luci-app-diskman luci-app-qbittorrent qbittorrent \
 	vlmcsd luci-app-vlmcsd sing-box; do
 	FOUND=""
@@ -425,7 +418,7 @@ for FEED_PKG in luci-app-openclash luci-app-passwall luci-app-openlist openlist 
 		exit 1
 	fi
 done
-echo "feeds packages present: openclash / passwall / openlist / diskman / qbittorrent / vlmcsd / sing-box"
+echo "feeds packages present: openclash / passwall / diskman / qbittorrent / vlmcsd / sing-box"
 
 #引入私有扩展脚本
 if [ -f "$GITHUB_WORKSPACE/Scripts/PRIVATE.sh" ]; then

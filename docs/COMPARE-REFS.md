@@ -87,16 +87,13 @@ WiFi 这一行的实现差异值得注意：ax6600.emmc 是"静态覆盖"，好�
 
 ### 2.4 额外注入的内容
 
-`Files/RE-CS-02` 里的 11 个文件是另外三个仓库都没有的：
+`Files/RE-CS-02` 里的 7 个文件是另外三个仓库都没有的：
 
 - `etc/apk/repositories.d/customfeeds.list` —— 追加 NJU 镜像源（`distfeeds.list` 仍由 base-files 生成官方源）
-- `etc/uci-defaults/90-alexwrt-compat` —— 建 `/etc/config/alexwrt`（NetBird 兼容守护开关，默认 `off`）、写 sysupgrade 保留、对齐服务软链
-- `etc/uci-defaults/99-alexwrt-legacy-cleanup` —— 撤掉旧的 `netbird` CLI 包装、清理废弃脚本与软链
 - `etc/init.d/netbird-passwall-compat-watch` —— 兼容守护服务（`watch` 模式才启用）
 - `usr/bin/netbird-compat-ctl` —— 守护的开关/状态/日志入口，LuCI「服务 → NetBird 工具」调它
 - `usr/bin/netbird-passwall-compat.sh` —— 规则实现本体（守护以 `--once` 调它）
 - `usr/bin/netbird-passwall-compat-watch.sh` —— 守护主循环
-- `usr/bin/export-router-state.sh`、`usr/bin/restore-package-list.sh` —— 手动诊断/备份脚本，不自启
 - `usr/share/alexwrt/*.md` —— 脚本说明
 
 早期那套 WiFi 首启脚本（`99-alexwrt-wireless`）和 `--disable-dns` 包装（`98-netbird-default-nodns`）已在 2026-11-08 全部删除。现在无线仍由上游 `/sbin/wifi config` 生成，只在构建期改 `mac80211.uc` 的兜底值：SSID 换成 `alexwrt-jdcloud-<频段>`，国家码 `US`，2.4G `5/HE40`、PCIe `36/HE160`、SoC 5G `161/HE80`，运行时不碰用户配置。

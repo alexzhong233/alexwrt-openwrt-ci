@@ -56,8 +56,7 @@ netlink 事件在接收缓冲溢出（ENOBUFS）时会被静默丢弃，所以�
 
 ## 其他脚本说明
 
-- `export-router-state.sh`：导出已安装软件包、UCI 配置、网络状态、服务状态和脚本。默认按键名和值特征做启发式脱敏（密码、密钥、令牌、私钥段、代理 URI、带 token 的订阅链接等），单个文件脱敏失败时会跳过而不是退回明文；脱敏不能覆盖所有写法，导出包一律当敏感文件处理，只有私密保存时才用 `INCLUDE_SECRETS=1` 原样导出。
-- `restore-package-list.sh`：按照清单重新安装软件包，不恢复 UCI 配置、Docker 卷、证书、令牌或应用数据。
+路由器状态导出与软件包还原脚本（`export-router-state.sh` / `restore-package-list.sh`）已从固件移出，源码保留在仓库 `backup/tools/`，需要时手动拷到设备执行。
 
 ## 常用命令
 
@@ -65,7 +64,6 @@ netlink 事件在接收缓冲溢出（ENOBUFS）时会被静默丢弃，所以�
 /usr/bin/netbird-compat-ctl status
 /usr/bin/netbird-compat-ctl mode watch
 /usr/bin/netbird-passwall-compat.sh --once
-/usr/bin/export-router-state.sh /tmp/router-export-before-upgrade
 ```
 
 涉及配置修改的命令都必须显式执行。后续新增脚本默认只作为手动工具加入；确需常驻时，单独提供服务文件和启用说明，不在固件中自动启用。
