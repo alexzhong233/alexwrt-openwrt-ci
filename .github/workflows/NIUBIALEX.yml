@@ -51,7 +51,6 @@ jobs:
       WRT_REPO: https://github.com/VIKINGYFY/immortalwrt.git
       WRT_BRANCH: owrt
       WRT_SOURCE: VIKINGYFY/immortalwrt
-      WRT_EXTRA_CONFIG: IPQ60XX-NIUBIALEX-OVERRIDES.txt
       WRT_PACKAGE: ${{inputs.PACKAGE}}
       WRT_TEST: ${{inputs.TEST || false}}
       WRT_FILES: RE-CS-02

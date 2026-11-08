@@ -18,7 +18,7 @@
 | 维度 | VIKINGYFY 上游 | 577090447/IPQ60XX | 577090447/ax6600.emmc | 你的 niubiAlex |
 |---|---|---|---|---|
 | 工作流数量 | 10 个（AIROHA/MTK/OWRT/QCA/QCB/WRT-CORE/WRT-TEST/Auto-Clean/Cache-Clean） | 6 个 | 3 个（QCA-ALL/WRT-CORE/WRT-TEST） | 10 个 + 自建 `NIUBIALEX.yml` |
-| Config 数量 | 15 个（覆盖全平台） | 3 个（GENERAL/IPQ60XX-WIFI-YES/TEST） | 8 个 | 16 个（上游 15 个 + `IPQ60XX-NIUBIALEX` + `-OVERRIDES`） |
+| Config 数量 | 15 个（覆盖全平台） | 3 个（GENERAL/IPQ60XX-WIFI-YES/TEST） | 8 个 | 15 个（上游全部 + `IPQ60XX-NIUBIALEX-WIFI-YES`；原 `-OVERRIDES` 已并入该文件） |
 | `files/` 注入目录 | 无 | 无 | **有**（5 个文件） | **有**（`Files/RE-CS-02`，12 个文件） |
 | WRT-CORE 版本 | 最新（含 cache-rollover 缓存滚动） | 最新 | **较旧**（去掉了 cache-rollover，`WRT_TEST` 还是 string） | 最新 + 3 个新输入 |
 | 上游源码 | 自己提供 | `577090447/immortalwrt` `main` | 同左 | `VIKINGYFY/immortalwrt` `owrt` |
@@ -32,8 +32,7 @@
 | `.github/workflows/WRT-CORE.yml` | +29 行 | 新增 `WRT_EXTRA_CONFIG`/`WRT_FILES`/`WRT_APPFILTER` 三个输入，新增 `Install Custom Files` 步骤，支持追加覆盖配置 |
 | `Scripts/Packages.sh` | +166 行 | 新增 `UPDATE_TOPLEVEL_PACKAGE`/`UPDATE_NESTED_PACKAGE` 两个函数 + 大量自建包 |
 | `Scripts/Settings.sh` | 9 行 | `WRT_WORD` 为空时改成开放 WiFi（上游无条件写密码） |
-| `Config/IPQ60XX-NIUBIALEX.txt` | 新增 | 只选 RE-CS-02 + 应用清单 |
-| `Config/IPQ60XX-NIUBIALEX-OVERRIDES.txt` | 新增 | 最终覆盖（homeproxy/passwall2 =m、diskman、NSS） |
+| `Config/IPQ60XX-NIUBIALEX-WIFI-YES.txt` | 新增 | 只选 RE-CS-02 + 应用清单 + 板级覆盖（homeproxy/passwall2 =m、diskman、NSS）；原独立的 `-OVERRIDES.txt` 已于 11-08 并入 |
 | `Files/RE-CS-02/**` | 新增 12 个 | uci-defaults 无线初始化 + NetBird 系列脚本 |
 | `Config/GENERAL.txt`、`Config/IPQ60XX-WIFI-YES.txt`、`QCA-ALL.yml`、`WRT-TEST.yml`、`Handles.sh` | **0 改动** | 与上游完全一致 |
 

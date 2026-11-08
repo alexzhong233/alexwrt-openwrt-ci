@@ -1,4 +1,7 @@
 # 京东云雅典娜 RE-CS-02
+#
+# 本文件在 GENERAL.txt 之后写入 .config，同名项以这里为准（后者覆盖前者）。
+# 历史上有独立的 -OVERRIDES.txt 做第三段兜底，已并入本文件。
 CONFIG_TARGET_qualcommax=y
 CONFIG_TARGET_qualcommax_ipq60xx=y
 CONFIG_TARGET_DEVICE_qualcommax_ipq60xx_DEVICE_jdcloud_re-cs-02=y
@@ -16,6 +19,12 @@ CONFIG_PACKAGE_luci-i18n-oaf-zh-cn=y
 #
 # CONFIG_ATH11K_NSS_WIFI 必须为 y：它决定 /usr/share/nss-wifi/wlan 的内容是 1，
 # 少了这行，启动脚本会认为本机没有可卸载的 WiFi，直接退回 host path。
+#
+# 固件线 12.5：上游 package/qca-nss/nss-firmware/Makefile 的 choice 里
+# `default NSS_FIRMWARE_VERSION_12_5`，不写这行也是 12.5；显式写出来只是把
+# 默认值钉死，避免上游哪天改默认、或有人误勾 11_4。两条线的差别只有 802.11s：
+# 12.5 的 help 原文是 "Does not accept an 802.11s mesh interface"，11_4 是
+# "the last firmware line with 802.11s mesh support"。要跑 802.11s 回程才换 11_4。
 CONFIG_PACKAGE_nss-firmware=y
 CONFIG_PACKAGE_kmod-nss-wifi-drv=y
 CONFIG_ATH11K_NSS_WIFI=y
@@ -63,9 +72,11 @@ CONFIG_PACKAGE_openlist=y
 CONFIG_PACKAGE_luci-app-openlist=y
 CONFIG_PACKAGE_luci-i18n-openlist-zh-cn=y
 CONFIG_PACKAGE_luci-app-diskman=y
+# 与当前路由器软件清单保持一致：用 diskman，不额外装 mini-diskmanager。
+CONFIG_PACKAGE_luci-app-mini-diskmanager=n
 CONFIG_PACKAGE_qbittorrent=y
 CONFIG_PACKAGE_luci-app-qbittorrent=y
-CONFIG_PACKAGE_fullconenat-sonic=y
+# fullconenat-sonic 本体已在 GENERAL.txt 里选了，这里只补 LuCI 页面和翻译。
 CONFIG_PACKAGE_luci-app-fullconenat-sonic=y
 CONFIG_PACKAGE_luci-i18n-fullconenat-sonic-zh-cn=y
 CONFIG_PACKAGE_rtp2httpd=y
@@ -87,3 +98,8 @@ CONFIG_PACKAGE_luci-app-vlmcsd=y
 # WorkBuddy2API 整个不参与构建：界面在 backup/luci-app-workbuddy2api，
 # 包骨架与应用源码的拉取脚本在 backup/prepare-workbuddy2api.sh，
 # 两边都不在构建树里，所以这里连 =m 都没有 —— 留 =m 只会得到一个不存在的符号。
+
+# 覆盖 GENERAL.txt 的通用项：这两个在 GENERAL 里是 =y，雅典娜上只编译不预装，
+# 需要时从软件包管理器装。因为本文件在 GENERAL 之后写入，这里的值生效。
+CONFIG_PACKAGE_luci-app-homeproxy=m
+CONFIG_PACKAGE_luci-app-passwall2=m

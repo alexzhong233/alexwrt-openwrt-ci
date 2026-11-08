@@ -11,8 +11,7 @@
 | 项目 | 位置 |
 |---|---|
 | 工作流 | `.github/workflows/NIUBIALEX.yml`（调度入口）、`WRT-CORE.yml`（实际编译，被调用） |
-| 设备配置 | `Config/IPQ60XX-NIUBIALEX-WIFI-YES.txt` |
-| 追加配置 | `Config/IPQ60XX-NIUBIALEX-OVERRIDES.txt` |
+| 设备配置 | `Config/IPQ60XX-NIUBIALEX-WIFI-YES.txt`（在 `GENERAL.txt` 之后写入，同名项以它为准） |
 | 软件包处理 | `Scripts/Packages.sh` |
 | 构建期设置 | `Scripts/Settings.sh`（SSID/密码/后台地址）、`Scripts/Handles.sh`（主题与插件修补） |
 | 固件文件注入 | `Files/RE-CS-02/` |
