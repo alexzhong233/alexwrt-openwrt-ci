@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: MIT
-# Copyright (C) 2026 niubiAlex
+# Copyright (C) 2026 alexwrt
 
-name: NIUBIALEX
+name: ALEXWRT
 
 on:
   schedule:
@@ -30,7 +30,7 @@ jobs:
     with:
       # 末尾的 -WIFI-YES 是必要的：WRT-CORE 用它来给固件文件名打 WIFI 标记，
       # 不写就会被识别成 none，文件名变成 ...-none-<日期>.bin
-      WRT_CONFIG: IPQ60XX-NIUBIALEX-WIFI-YES
+      WRT_CONFIG: IPQ60XX-ALEXWRT-WIFI-YES
       WRT_THEME: aurora
       WRT_NAME: alexWrt
       # 无线不做定制：不传 SSID/密码，交给上游 mac80211 在首启时按硬件生成。

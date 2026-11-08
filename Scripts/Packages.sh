@@ -354,7 +354,7 @@ UPDATE_PACKAGE "quickfile" "sbwml/luci-app-quickfile" "main"
 #   · UCI 段   /etc/config/openlist2     -> /etc/config/openlist（字段名也变了，
 #              port -> listen_http_port，data_dir 没有对应项，官方写死 /etc/openlist）
 #   · 数据     /etc/openlist2/data.db    -> /etc/openlist/data.db
-# 数据的搬迁由 Files/RE-CS-02/etc/uci-defaults/95-niubialex-openlist-migrate 负责。
+# 数据的搬迁由 Files/RE-CS-02/etc/uci-defaults/95-alexwrt-openlist-migrate 负责。
 
 # 当前路由器使用的 SysTools 来自 LinkEase 应用扩展仓库。
 UPDATE_PACKAGE "systools" "linkease/openwrt-app-actions" "main" "pkg"

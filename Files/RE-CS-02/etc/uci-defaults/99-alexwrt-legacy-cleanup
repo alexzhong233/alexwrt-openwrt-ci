@@ -8,7 +8,7 @@
 #   2. 删掉已废弃的辅助脚本、轮询服务和它们的开机软链。
 #
 # 这不是守护的一部分，跟兼容规则无关；跑完就被 uci_apply_defaults 删掉。
-# 配置初始化在 90-niubialex-compat。等确认不再有旧版设备升级上来，整个文件可以删除。
+# 配置初始化在 90-alexwrt-compat。等确认不再有旧版设备升级上来，整个文件可以删除。
 
 set -u
 
@@ -24,7 +24,7 @@ if [ -x "$REAL" ]; then
 		if cp -f "$REAL" "$CLI" 2>/dev/null; then
 			chmod 755 "$CLI"
 			rm -f "$REAL"
-			logger -t niubialex-cleanup "已移除 netbird --disable-dns 包装，恢复原生 CLI"
+			logger -t alexwrt-cleanup "已移除 netbird --disable-dns 包装，恢复原生 CLI"
 		fi
 	elif [ -x "$CLI" ]; then
 		# CLI 已经是正常二进制，中间文件只是残留。

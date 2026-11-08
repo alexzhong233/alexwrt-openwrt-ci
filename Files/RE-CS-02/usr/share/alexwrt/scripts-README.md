@@ -30,7 +30,7 @@ meta mark <PassWall 当前 mark> return
 
 用 `nft monitor` 订阅 nftables 规则变更，NetBird 一重建 prerouting 链就立即补回，不按固定周期轮询。规则发现和插入复用 `netbird-passwall-compat.sh --once`，只有一份实现。
 
-固件里唯一的常驻方式，由 `/etc/config/niubialex` 控制，默认关闭：
+固件里唯一的常驻方式，由 `/etc/config/alexwrt` 控制，默认关闭：
 
 ```sh
 /usr/bin/netbird-compat-ctl mode watch   # 启用

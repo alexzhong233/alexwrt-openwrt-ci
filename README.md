@@ -1,6 +1,6 @@
-# niubiAlex 雅典娜 RE-CS-02 固件
+# alexwrt 雅典娜 RE-CS-02 固件
 
-京东云雅典娜 `jdcloud_re-cs-02` 的个人 OpenWrt 构建，源码取自 `VIKINGYFY/immortalwrt` 的 `owrt` 分支。每天北京时间 06:00 自动编译，也可以在 Actions 页面手动运行。
+京东云雅典娜 `jdcloud_re-cs-02` 的个人 OpenWrt 构建，源码取自 `VIKINGYFY/immortalwrt` 的 `owrt` 分支。每天北京时间 06:17 自动编译，也可以在 Actions 页面手动运行。
 
 - 后台地址：`192.168.88.1`
 - root 密码：不预设，首次登录后自行设置
@@ -10,8 +10,8 @@
 
 | 项目 | 位置 |
 |---|---|
-| 工作流 | `.github/workflows/NIUBIALEX.yml`（调度入口）、`WRT-CORE.yml`（实际编译，被调用） |
-| 设备配置 | `Config/IPQ60XX-NIUBIALEX-WIFI-YES.txt`（在 `GENERAL.txt` 之后写入，同名项以它为准） |
+| 工作流 | `.github/workflows/ALEXWRT.yml`（调度入口）、`WRT-CORE.yml`（实际编译，被调用） |
+| 设备配置 | `Config/IPQ60XX-ALEXWRT-WIFI-YES.txt`（在 `GENERAL.txt` 之后写入，同名项以它为准） |
 | 软件包处理 | `Scripts/Packages.sh` |
 | 构建期设置 | `Scripts/Settings.sh`（后台地址、主机名）、`Scripts/Handles.sh`（主题与插件修补） |
 | 固件文件注入 | `Files/RE-CS-02/` |
@@ -33,19 +33,29 @@
 
 ## Wi-Fi 默认值
 
-无线不做任何定制，完全走上游规则：首次启动时由 `/sbin/wifi config`（内部执行 `ucode /lib/wifi/mac80211.uc`）按硬件生成 `/etc/config/wireless`，三个 radio（2.4G / 5.2G / 5.8G）各自一套，默认 **SSID `OWRT`、WPA2-PSK（`psk2+ccmp`）、密码 `12345678`**。
+## Wi-Fi 默认值
 
-这三个值是上游 `package/network/config/wifi-scripts/files/lib/wifi/mac80211.uc` 里写死的兜底：
+无线仍然走上游机制：首次启动时由 `/sbin/wifi config`（内部执行 `ucode /lib/wifi/mac80211.uc`）按硬件生成 `/etc/config/wireless`，三个 radio 各自一套。唯一定制是 SSID 的兜底值，由 `Scripts/Handles.sh` 在构建期打补丁：
+
+| 频段 | 硬件 | 默认 SSID |
+|---|---|---|
+| 2.4 GHz | SoC 内置 ath11k | `alexwrt-jdcloud-2.4g` |
+| 5.2 GHz | SoC 内置 ath11k | `alexwrt-jdcloud-5.2g` |
+| 5.8 GHz | PCIe ath11k（DTS 里 `pci17cb,1104`） | `alexwrt-jdcloud-5.8g` |
+
+加密 `psk2+ccmp`（WPA2-PSK）、密码 `12345678`、国家码 `CN` 都保持上游默认：
 
 ```ucode
-set ${si}.ssid='${defaults?.ssid || 'OWRT'}'
+set ${si}.ssid='${defaults?.ssid || 'alexwrt-jdcloud-' + band_suffix}'
 set ${si}.encryption='${defaults?.encryption || 'psk2+ccmp'}'
 set ${si}.key='${defaults?.key || '12345678'}'
 ```
 
-只有 `/etc/board.json` 里带 `wlan.defaults.ssids` 时才会被覆盖，而 RE-CS-02 的板级脚本（`target/linux/qualcommax/ipq60xx/base-files/etc/board.d/02_network`）没有设置它，所以每次刷机都是这三个默认值。第一次登录后可以在 LuCI 里改，之后不会被任何脚本覆盖；当前值可以在路由器上 `uci show wireless | grep -E 'ssid|key'` 查。
+频段后缀靠 phy 路径判断：SoC 内置 phy 一个设备同时提供 2G/5G 两个 band，PCIe 那块才是 5.8G，所以 `match(phy.path, /pci/)` 命中即 `5.8g`。
 
-原先有一个首启脚本 `Files/RE-CS-02/etc/uci-defaults/99-niubialex-wireless` 会改 SSID 和密码，已删除：它在「无线还没就绪」时返回 1，而 `uci_apply_defaults` 只删除返回 0 的脚本，于是脚本被留下来每次启动重试；重试一旦成功，就会把用户改过的无线设置覆盖回默认值。
+**这个改动只影响“生成配置文件”那一刻。** `radio_exists()` 会跳过已经存在的 radio，所以保留配置升级时不会覆盖你改过的 SSID；只有全新刷机（或不保留配置）才会看到新默认值。当前值可以在路由器上 `uci show wireless | grep -E 'ssid|key'` 查。
+
+早期有一个首启脚本 `99-alexwrt-wireless` 会改 SSID 和密码，已删除：它在「无线还没就绪」时返回 1，而 `uci_apply_defaults` 只删除返回 0 的脚本，于是脚本被留下来每次启动重试；重试一旦成功，就会把用户改过的无线设置覆盖回默认值。改默认值请继续用构建期补丁这条路，不要退回运行时脚本。
 
 ## 固件内置内容
 
@@ -57,7 +67,7 @@ set ${si}.key='${defaults?.key || '12345678'}'
 - 不进固件：ZeroTier、易有云文件管理器。WorkBuddy2API 已整个移出构建，界面和拉取脚本都留在 `backup/`。
 - NetBird 使用原生 CLI，`netbird up` 不做任何参数包装，行为由 LuCI 的 NetBird 页面决定。
 
-软件包在 CI 里由 `Scripts/Packages.sh` 下载进编译树，仓库不保存编译好的 `.ipk`。脚本装到 `/usr/bin/`，说明文档装到 `/usr/share/niubiAlex/`，都不注册为常驻服务。逐包核对见 [docs/SOFTWARE-AUDIT.md](docs/SOFTWARE-AUDIT.md)。
+软件包在 CI 里由 `Scripts/Packages.sh` 下载进编译树，仓库不保存编译好的 `.ipk`。脚本装到 `/usr/bin/`，说明文档装到 `/usr/share/alexwrt/`，都不注册为常驻服务。逐包核对见 [docs/SOFTWARE-AUDIT.md](docs/SOFTWARE-AUDIT.md)。
 
 ## 软件源与固件文件
 
@@ -67,7 +77,7 @@ set ${si}.key='${defaults?.key || '12345678'}'
 
 ## 脚本
 
-固件里的脚本都在 `/usr/bin/`，默认不启动。NetBird 兼容守护由 `/etc/config/niubialex` 的 `mode` 显式开关（默认 `off`），其他脚本只在明确执行命令后才检查或修改配置。
+固件里的脚本都在 `/usr/bin/`，默认不启动。NetBird 兼容守护由 `/etc/config/alexwrt` 的 `mode` 显式开关（默认 `off`），其他脚本只在明确执行命令后才检查或修改配置。
 
 ### NetBird 兼容守护
 

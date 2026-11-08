@@ -12,7 +12,7 @@ set -u
 WATCH_SVC="netbird-passwall-compat-watch"
 WATCH_BIN="/usr/bin/netbird-passwall-compat-watch.sh"
 APPLY_BIN="/usr/bin/netbird-passwall-compat.sh"
-CFG="niubialex.compat"
+CFG="alexwrt.compat"
 
 usage() {
 	cat <<'EOF'
@@ -115,7 +115,7 @@ set_mode() {
 		echo "写入 uci 失败" >&2
 		return 1
 	}
-	uci -q commit niubialex || {
+	uci -q commit alexwrt || {
 		echo "提交 uci 失败" >&2
 		return 1
 	}
@@ -146,7 +146,7 @@ set_number() {
 	esac
 
 	uci -q set "$CFG.$key=$value" || return 1
-	uci -q commit niubialex || return 1
+	uci -q commit alexwrt || return 1
 	echo "$label 已设为 $value"
 
 	# 正在跑的服务要重启才能读到新间隔

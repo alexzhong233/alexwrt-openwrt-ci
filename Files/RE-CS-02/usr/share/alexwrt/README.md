@@ -1,4 +1,4 @@
-# niubiAlex 雅典娜 RE-CS-02 固件
+# alexwrt 雅典娜 RE-CS-02 固件
 
 这是针对京东云雅典娜 `jdcloud_re-cs-02` 的个人构建。默认后台地址为 `192.168.88.1`，不预设 LuCI 的 root 密码，首次登录后自行设置。
 
@@ -20,7 +20,7 @@
 
 固件只带一个兼容守护：`netbird-passwall-compat-watch`，事件驱动。它用 `nft monitor` 订阅规则变更，NetBird 重建 `netbird-mangle-prerouting` 链后立即补回 PassWall 的 mark 豁免；另有 60 秒兜底全量检查，防止 monitor 丢事件。实际改规则的实现是 `/usr/bin/netbird-passwall-compat.sh`，它只作为前者的执行核心，不再单独注册服务。
 
-它由 `/etc/config/niubialex` 控制：
+它由 `/etc/config/alexwrt` 控制：
 
 ```
 config netbird 'compat'

@@ -7,7 +7,7 @@ on:
   # 构建结束之后再清理，避免像以前那样在编译前一小时把缓存全删掉，
   # 导致每次都要重新编译 host 工具链（冷编译 4 小时 vs 热编译 1 小时）。
   workflow_run:
-    workflows: [NIUBIALEX]
+    workflows: [ALEXWRT]
     types: [completed]
   # 手动清理
   workflow_dispatch:

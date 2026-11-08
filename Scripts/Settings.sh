@@ -14,7 +14,7 @@ find ./feeds/luci/modules/luci-mod-status/ -type f -name "10_system.js" -exec se
 #无线不做任何定制
 # SSID 和密码完全交给上游的 mac80211 生成规则：首次启动时 /sbin/wifi config
 # 按硬件生成 /etc/config/wireless，SSID 取上游默认值，密钥随机生成。
-# 这里以前有一份 Files/RE-CS-02/etc/uci-defaults/99-niubialex-wireless 去改
+# 这里以前有一份 Files/RE-CS-02/etc/uci-defaults/99-alexwrt-wireless 去改
 # SSID/密码，但它返回 1 时会被 uci_apply_defaults 留在原地重试，重试成功就会
 # 覆盖用户在 LuCI 里改过的配置（表现为每次重启无线设置被重置），已删除。
 

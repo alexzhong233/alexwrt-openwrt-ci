@@ -4,7 +4,7 @@
 # 实际的改规则实现放在 /usr/bin/netbird-passwall-compat.sh，本服务只负责
 # 用 nft monitor 监听事件并调度它（--once），那个脚本不再单独注册服务。
 #
-# 默认不运行。只有 /etc/config/niubialex 里显式写了
+# 默认不运行。只有 /etc/config/alexwrt 里显式写了
 #
 #   option mode 'watch'
 #
@@ -20,13 +20,13 @@ TAG="netbird-passwall-compat-watch"
 start_service() {
 	local mode watchdog
 
-	mode=$(uci -q get niubialex.compat.mode 2>/dev/null)
+	mode=$(uci -q get alexwrt.compat.mode 2>/dev/null)
 	if [ "$mode" != "watch" ]; then
-		logger -t "$TAG" "mode='${mode:-unset}'，未启用事件守护（需要 niubialex.compat.mode=watch）"
+		logger -t "$TAG" "mode='${mode:-unset}'，未启用事件守护（需要 alexwrt.compat.mode=watch）"
 		return 0
 	fi
 
-	watchdog="${WATCHDOG:-$(uci -q get niubialex.compat.watchdog 2>/dev/null)}"
+	watchdog="${WATCHDOG:-$(uci -q get alexwrt.compat.watchdog 2>/dev/null)}"
 	[ -n "$watchdog" ] || watchdog=60
 
 	procd_open_instance

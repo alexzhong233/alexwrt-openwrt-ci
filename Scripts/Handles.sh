@@ -52,6 +52,67 @@ FIX "theme-vantage" "$PACKAGE_PATH/luci-theme-vantage" sed -i \
 	-e '/^\/\* progress bars: thin track/,$ { /^\.cbi-progressbar::before {/,/^}/ { s/^[[:space:]]*font: 500 var(--fs-micro)\/1\.2 var(--mono);/\tfont: inherit; line-height: normal;/; } }' \
 	"$PACKAGE_PATH/luci-theme-vantage/luci-theme-vantage/htdocs/luci-static/vantage/vantage.css"
 
+#无线默认 SSID
+#
+#首次启动由 /sbin/wifi config 调 ucode /lib/wifi/mac80211.uc 生成
+#/etc/config/wireless，SSID / 加密 / 密码是写死的兜底：
+#  set ${si}.ssid='${defaults?.ssid || 'OWRT'}'
+#  set ${si}.encryption='${defaults?.encryption || 'psk2+ccmp'}'
+#  set ${si}.key='${defaults?.key || '12345678'}'
+#这里只替换 SSID 的兜底值，加密与密码保持上游默认。
+#
+#频段后缀按硬件归属判定：SoC 内置 ath11k 一个 phy 供 2.4G + 5.2G 两个 band，
+#PCIe 上的那块 ath11k（DTS 里 pci17cb,1104）才是 5.8G，所以 phy.path 里带
+#pci 的按 5.8g 算。判据放在 band_name 转小写之后，此时它已是 2g / 5g。
+#
+#铁律：这只改「默认值」，只在生成配置文件时生效。radio_exists() 会跳过已存在
+#的 radio，所以保留配置升级时用户自己改过的 SSID 不会被覆盖。当初删掉
+#uci-defaults 版 99-alexwrt-wireless 就是因为运行时脚本会反复覆盖用户配置，
+#不要再退回那套写法。
+WIFI_UC="$PACKAGE_PATH/network/config/wifi-scripts/files/lib/wifi/mac80211.uc"
+if [ -f "$WIFI_UC" ]; then
+	echo " "
+	if python3 - "$WIFI_UC" <<'PY'
+import io
+import sys
+
+path = sys.argv[1]
+src = io.open(path, encoding="utf-8").read()
+
+if "band_suffix" in src:
+    sys.exit(0)
+
+anchor = "\t\tband_name = lc(band_name);\n"
+if anchor not in src:
+    sys.exit("mac80211.uc: band_name anchor not found")
+
+inject = (
+    "\n\t\tlet band_suffix = band_name;\n"
+    "\t\tif (band_name == '2g')\n"
+    "\t\t\tband_suffix = '2.4g';\n"
+    "\t\telse if (band_name == '5g')\n"
+    "\t\t\tband_suffix = (match(phy.path, /pci/) != null) ? '5.8g' : '5.2g';\n"
+)
+src = src.replace(anchor, anchor + inject, 1)
+
+old = "set ${si}.ssid='${defaults?.ssid || 'OWRT'}'"
+new = "set ${si}.ssid='${defaults?.ssid || 'alexwrt-jdcloud-' + band_suffix}'"
+if old not in src:
+    sys.exit("mac80211.uc: ssid fallback not found")
+src = src.replace(old, new, 1)
+
+io.open(path, "w", encoding="utf-8", newline="\n").write(src)
+PY
+	then
+		echo "wireless-ssid has been fixed!"
+	else
+		#这里不能只告警：补丁没打上时 SSID 会退回 OWRT，而 ucode 语法错会让
+		#/sbin/wifi config 直接失败、设备起来没有无线。宁可构建失败。
+		echo "wireless-ssid fix failed!"
+		exit 1
+	fi
+fi
+
 #菜单归类
 #
 #顶层 admin/status(10) admin/system(20) admin/services(30) admin/nas(40)
