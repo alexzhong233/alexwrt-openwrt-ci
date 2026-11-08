@@ -1,0 +1,66 @@
+#!/bin/sh /etc/rc.common
+# SPDX-License-Identifier: MIT
+#
+# 把 uuplugin 的运行时目录 /tmp/uu 绑定到 overlay 上的 /etc/uu。
+#
+# 起因：插件的注册记录 activate_status 写在 /tmp/uu（tmpfs），重启即清空；而注册
+# 事实在网易云端，服务端认为设备已注册就不会让插件重写它，于是状态页永久停在
+# 「正在注册」——手机 App 却能正常绑定和加速。
+#
+# 目录级 bind mount 是唯一不改二进制就能改写入位置的办法：插件照旧写 /tmp/uu，
+# 实际落盘在 /etc/uu。比"轮询把文件拷回去"干净，因为不需要任何常驻进程——
+# 开机执行一次 mount 就退出。
+#
+# 副作用：/tmp/uu 里的 uuplugin 二进制也一起持久了，而 init 的下载分支只在文件
+# 不存在时才重新拉取，等于插件不再自动更新。所以下面加了一条：二进制超过
+# MAX_AGE 天就先删掉，让插件自己重下。换固件后若架构变了，rm -rf /etc/uu 即可。
+
+START=97
+STOP=05
+
+PERSIST=/etc/uu
+RUNTIME=/tmp/uu
+MAX_AGE=30
+TAG=uu-state
+
+log() { logger -t "$TAG" "$*"; }
+
+is_mounted() {
+	grep -q " $RUNTIME " /proc/mounts 2>/dev/null
+}
+
+start() {
+	# 没装或没开 UU，就没必要动挂载
+	[ -x /usr/libexec/uuplugin/uu-detect ] || return 0
+	[ "$(uci -q get uuplugin.@uuplugin[0].enabled 2>/dev/null)" = "1" ] || return 0
+
+	mkdir -p "$PERSIST" 2>/dev/null || return 0
+	[ -d "$RUNTIME" ] || mkdir -p "$RUNTIME"
+
+	is_mounted && return 0
+
+	# 首次启用时把 tmpfs 里已有的东西搬过去，避免把正在用的 uu.conf 遮掉
+	if [ -z "$(ls -A "$PERSIST" 2>/dev/null)" ] && [ -n "$(ls -A "$RUNTIME" 2>/dev/null)" ]; then
+		cp -a "$RUNTIME/." "$PERSIST/" 2>/dev/null
+	fi
+
+	# 放太久的二进制会让插件一直跑旧版本，先清掉触发重新下载
+	if [ -f "$PERSIST/uuplugin" ] &&
+		[ -n "$(find "$PERSIST/uuplugin" -mtime +$MAX_AGE 2>/dev/null)" ]; then
+		rm -f "$PERSIST/uuplugin"
+		log "持久目录里的 uuplugin 超过 ${MAX_AGE} 天，已删除以触发重新下载"
+	fi
+
+	if mount --bind "$PERSIST" "$RUNTIME"; then
+		log "已把 $RUNTIME 绑定到 $PERSIST，注册记录随固件保留"
+	else
+		log "绑定 $RUNTIME -> $PERSIST 失败，状态仍落在 tmpfs"
+		return 1
+	fi
+}
+
+stop() {
+	# bind mount 的数据本来就直接写在 PERSIST 上，卸载不会丢东西
+	is_mounted && umount "$RUNTIME" 2>/dev/null
+	return 0
+}
