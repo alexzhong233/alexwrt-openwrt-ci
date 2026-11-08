@@ -38,9 +38,71 @@ FIX "theme-vantage" "$PACKAGE_PATH/luci-theme-vantage" sed -i \
 	-e '/^\/\* progress bars: thin track/,$ { /^\.cbi-progressbar::before {/,/^}/ { s/^[[:space:]]*font: 500 var(--fs-micro)\/1\.2 var(--mono);/\tfont: inherit; line-height: normal;/; } }' \
 	"$PACKAGE_PATH/luci-theme-vantage/luci-theme-vantage/htdocs/luci-static/vantage/vantage.css"
 
-#修改natmapt菜单位置
-FIX "natmapt" "$PACKAGE_PATH/luci-app-natmapt" sed -i "s/network/services/g" \
-	"$PACKAGE_PATH/luci-app-natmapt/root/usr/share/luci/menu.d/luci-app-natmap.json"
+#菜单归类
+#
+#顶层 admin/status(10) admin/system(20) admin/services(30) admin/nas(40)
+#admin/vpn(50) admin/network(60) 都由 luci-base 的 menu.d 定义，只要有子项就
+#会自动出现，所以这里只改各包的菜单键，不需要自己建分类节点。
+#
+#两类包的改法不同，不能混：
+#  · JS 版（root/usr/share/luci/menu.d/*.json）：菜单是 JSON 的键，
+#    形如 "admin/services/openlist2"，子项键是 "admin/services/openlist2/basic"，
+#    父键是子键的前缀，所以替换不带结尾引号，一次覆盖父项和所有子项。
+#  · Lua 版（luasrc/controller/*.lua）：这些包根本没有 menu.d，菜单完全来自
+#    控制器里的 entry({"admin", "services", ...})，必须改 entry 的路径数组。
+#    passwall 用变量 appname 拼接路径，openclash / uuplugin 是字面量。
+#
+#改错的表现是页面上出现两个同名菜单（旧路径没删干净），或者点进去 404。
+RELOCATE_MENU() {
+	local NAME=$1 ROOT=$2 OLD=$3 NEW=$4 CNT=0 F
+
+	[ -d "$ROOT" ] || return 0
+
+	for F in $(find "$ROOT" -type f -path '*/menu.d/*.json' 2>/dev/null); do
+		sed -i "s#\"$OLD#\"$NEW#g" "$F" && CNT=$((CNT + 1))
+	done
+	echo "menu: $NAME -> $NEW ($CNT files)"
+}
+
+RELOCATE_MENU "netbird" "$PACKAGE_PATH/luci-app-netbird" \
+	"admin/services/netbird" "admin/vpn/netbird"
+RELOCATE_MENU "openlist2" "$PACKAGE_PATH/luci-app-openlist2" \
+	"admin/services/openlist2" "admin/nas/openlist2"
+RELOCATE_MENU "qbittorrent" "$PACKAGE_PATH/luci-app-qbittorrent" \
+	"admin/services/qbittorrent" "admin/nas/qbittorrent"
+#雅典娜屏控：上游放在「服务」里，这台机器上它属于系统级调参
+RELOCATE_MENU "athena-led" "$PACKAGE_PATH/luci-app-athena-led" \
+	"admin/services/athena_led" "admin/system/athena_led"
+#NATMap 上游本来就在「网络」，之前这里有个 s/network/services/g 把它搬进了
+#「服务」，现在搬回去。写成显式反向替换，上游哪天又改回 services 也能纠正。
+RELOCATE_MENU "natmapt" "$PACKAGE_PATH/luci-app-natmapt" \
+	"admin/services/natmap" "admin/network/natmap"
+
+#VPN 三个 Lua 界面：passwall / openclash / uu 加速器
+PASSWALL_CTRL="$PACKAGE_PATH/luci-app-passwall/luasrc/controller/passwall.lua"
+if [ -f "$PASSWALL_CTRL" ]; then
+	echo " "
+	if sed -i 's#"admin", "services", appname#"admin", "vpn", appname#g' "$PASSWALL_CTRL"; then
+		echo "menu: passwall -> admin/vpn (lua)"
+	fi
+fi
+
+OPENCLASH_CTRL="$PACKAGE_PATH/luci-app-openclash/luasrc/controller/openclash.lua"
+if [ -f "$OPENCLASH_CTRL" ]; then
+	echo " "
+	if sed -i 's#"admin", "services", "openclash"#"admin", "vpn", "openclash"#g' "$OPENCLASH_CTRL"; then
+		echo "menu: openclash -> admin/vpn (lua)"
+	fi
+fi
+
+UUGAME_CTRL=$(find "$PACKAGE_PATH" -maxdepth 6 -type f \
+	-path '*luci-app-uugamebooster*/luasrc/controller/uuplugin.lua' 2>/dev/null | head -1)
+if [ -n "$UUGAME_CTRL" ]; then
+	echo " "
+	if sed -i 's#"admin", "services", "uuplugin"#"admin", "vpn", "uuplugin"#g' "$UUGAME_CTRL"; then
+		echo "menu: uugamebooster -> admin/vpn (lua)"
+	fi
+fi
 
 #修复 luci-app-uugamebooster 打包期 postinst 失败
 #
