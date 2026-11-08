@@ -38,7 +38,7 @@ git mv backup/netbird-legacy/usr/bin/netbird-dns-guard.sh \
 
 ## 设备侧注意
 
-已经刷过含 `98-netbird-default-nodns` 的固件，`/usr/bin/netbird` 是包装脚本、真身在 `/usr/libexec/netbird-real`。新固件的 `99-niubialex-netbird` 会把它反向恢复（真身覆盖回 `/usr/bin/netbird`，然后删掉中间文件），同时清理上表里除 `98-*` 之外的残留副本和 `/etc/rc.d` 开机软链接。
+已经刷过含 `98-netbird-default-nodns` 的固件，`/usr/bin/netbird` 是包装脚本、真身在 `/usr/libexec/netbird-real`。新固件的 `99-niubialex-legacy-cleanup` 会把它反向恢复（真身覆盖回 `/usr/bin/netbird`，然后删掉中间文件），同时清理上表里除 `98-*` 之外的残留副本和 `/etc/rc.d` 开机软链接。配置初始化在 `90-niubialex-compat`。
 
 如果不想等新固件，可以手动执行：
 

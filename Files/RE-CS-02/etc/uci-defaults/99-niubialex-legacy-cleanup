@@ -1,0 +1,51 @@
+#!/bin/sh
+# SPDX-License-Identifier: MIT
+#
+# 一次性清理：把早期固件留下的 NetBird 改造件恢复到上游状态。
+#
+# 做两件事：
+#   1. 撤掉 `netbird up` 的 --disable-dns 包装，恢复原生 CLI；
+#   2. 删掉已废弃的辅助脚本、轮询服务和它们的开机软链。
+#
+# 这不是守护的一部分，跟兼容规则无关；跑完就被 uci_apply_defaults 删掉。
+# 配置初始化在 90-niubialex-compat。等确认不再有旧版设备升级上来，整个文件可以删除。
+
+set -u
+
+# ---- 1. 恢复原生 netbird CLI ----------------------------------------------
+# 旧固件把真身挪到 /usr/libexec/netbird-real，并在 /usr/bin/netbird 放了一个
+# 自动追加 --disable-dns 的 shell 包装。真身覆盖回去，然后删中间文件。
+# 包装脚本第一行是 #!，二进制不会是，用这个特征判断，重复执行不会误伤。
+REAL=/usr/libexec/netbird-real
+CLI=/usr/bin/netbird
+if [ -x "$REAL" ]; then
+	if [ "$(head -c 2 "$CLI" 2>/dev/null)" = '#!' ]; then
+		# 复制失败就不删真身，免得最后连 netbird 命令都没有了。
+		if cp -f "$REAL" "$CLI" 2>/dev/null; then
+			chmod 755 "$CLI"
+			rm -f "$REAL"
+			logger -t niubialex-cleanup "已移除 netbird --disable-dns 包装，恢复原生 CLI"
+		fi
+	elif [ -x "$CLI" ]; then
+		# CLI 已经是正常二进制，中间文件只是残留。
+		rm -f "$REAL"
+	fi
+fi
+
+# ---- 2. 清理已废弃的脚本与服务 --------------------------------------------
+# 新固件不再包含这些路径；升级勾「保留配置」时 overlay 会把旧副本带过来，
+# 不清掉它们还会被调用（尤其是 /etc/rc.d 里的开机软链接）。
+for f in \
+	/etc/init.d/netbird-passwall-compat \
+	/usr/bin/netbird-dns-guard.sh \
+	/usr/bin/netbird-dnsmasq-wt0-fix.sh \
+	/usr/bin/netbird-passwall-diagnose.sh \
+	/usr/bin/netbird-passwall-lan-fix.sh; do
+	[ -e "$f" ] && rm -f "$f"
+done
+# 只删轮询服务自己的软链接；-watch 的链接名不同，不会被误删。
+for l in /etc/rc.d/S??netbird-passwall-compat /etc/rc.d/K??netbird-passwall-compat; do
+	[ -e "$l" ] && rm -f "$l"
+done
+
+exit 0
