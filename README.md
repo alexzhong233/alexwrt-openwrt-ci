@@ -60,7 +60,7 @@ set ${s}.country='${country || 'US'}'
 
 - OpenAppFilter：`appfilter`、`kmod-oaf`、`luci-app-oaf` 和中文翻译，页面在“服务 -> 应用过滤”。
 - 雅典娜 LED、Harbor File、OpenList、qBittorrent、UU 游戏加速、KMS。
-- Docker、Docker Compose、1Panel 管理页 `luci-app-istorepanel`（容器本体由页面按需安装）、NetBird LuCI、FullConeNAT、RTP2HTTPD、软件包管理器、SysTools。
+- Docker、Docker Compose、NetBird LuCI、FullConeNAT、RTP2HTTPD、软件包管理器、SysTools。
 - NSS：`nss-firmware`、`kmod-nss-wifi-drv`、`ATH11K_NSS_WIFI` 与 ath11k/mac80211 NSS 补丁都来自上游源码；自建状态页 `luci-app-nss-status` 在“状态 -> NSS 卸载”，直接读 `nss-wifi-drv` 的 debugfs 显示加速状态、各 vdev 收发计数和流表，不含驱动，不负责开启 NSS。
 - 默认进 rootfs：NetBird、PassWall、OpenClash、Dockerman。HomeProxy 和 PassWall2 只编译为可安装模块。
 - 不进固件：ZeroTier、易有云文件管理器。WorkBuddy2API 已整个移出构建，界面和拉取脚本都留在 `backup/`。

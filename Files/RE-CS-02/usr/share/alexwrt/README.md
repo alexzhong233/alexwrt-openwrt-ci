@@ -23,7 +23,6 @@
 - NSS 功能主体来自 `VIKINGYFY/immortalwrt`：构建配置显式选择 `nss-firmware`、`kmod-nss-wifi-drv` 和 `ATH11K_NSS_WIFI`，实际 ath11k/mac80211 NSS 补丁也来自该上游源码。
 - 自建状态页 `luci-app-nss-status` 在“状态 -> NSS 卸载”，读 `nss-wifi-drv` 的 debugfs 显示加速状态、各接口收发计数和流转发表；它不包含 NSS 驱动，不负责打开无线 NSS。老旧上游的 `luci-app-nss` 读的是 qca-nss-drv 的目录，在本固件里永远显示未加载，已移除。
 - NetBird、Dockerman、PassWall 和 OpenClash 默认进入固件；HomeProxy 和 PassWall2 只编译为可安装模块，不默认写入 rootfs。NetBird 是原生 CLI，`netbird up` 的行为由 LuCI 的 NetBird 页面决定，固件不做任何包装或参数注入。
-- 1Panel LuCI 管理页 `luci-app-istorepanel` 默认进入固件，依赖 Docker；1Panel 容器本体按需部署。
 - ZeroTier 和易有云文件管理器不进入固件。WorkBuddy2API 整个不参与构建（包骨架与应用源码的拉取脚本和 LuCI 界面都在仓库 `backup/` 下），需要时自行从上游 release 安装。设置向导 `luci-app-netwizard` 正常预装。
 
 ## NetBird 兼容守护

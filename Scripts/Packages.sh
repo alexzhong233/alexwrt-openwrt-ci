@@ -198,10 +198,10 @@ if [ -f "$DOCKERMAN_MAKEFILE" ]; then
 	sed -i 's/^PKG_VERSION:=v/PKG_VERSION:=/' "$DOCKERMAN_MAKEFILE"
 fi
 
-# luci-lib-docker 也要 clone：官方 feed 里早就没有这个库了，而
-# luci-app-istorepanel 的 LUCI_DEPENDS 里明写着 +luci-lib-docker。缺了它，
-# .config 里包照样选中，打 rootfs 时 apk 才报 "luci-lib-docker (no such
-# package)"。只能从 lisaac 的原仓库取。
+# luci-lib-docker 也要 clone：官方 feed 里早就没有这个库了，而 Dockerman
+# 0.5.26（Lua + CBI 版）的依赖里写着 +luci-lib-docker。缺了它，.config 里
+# 包照样选中，打 rootfs 时 apk 才报 "luci-lib-docker (no such package)"。
+# 只能从 lisaac 的原仓库取。
 UPDATE_NESTED_PACKAGE "luci-lib-docker" "lisaac/luci-lib-docker" "master" "collections/luci-lib-docker"
 # 新 APK 打包器要求版本号以数字开头，上游写的是 v0.3.4。
 DOCKER_LIB_MAKEFILE="./package/luci-lib-docker/Makefile"
@@ -380,12 +380,6 @@ fi
 #   luci-lib-iform —— LinkEase 的 NAS LuCI 仓库，systools 要求 >=1.1
 UPDATE_PACKAGE "speedtestcli" "linkease/openwrt-app-actions" "main" "pkg"
 UPDATE_NESTED_PACKAGE "luci-lib-iform" "linkease/nas-packages-luci" "main" "luci/luci-lib-iform"
-
-
-# 1Panel LuCI 管理页。当前公开包位于 openwrt-app-actions 的嵌套目录，
-# 直接提取 luci-app-istorepanel；找不到目录时让 CI 明确失败，避免生成
-# 一个看似成功但缺少 1Panel 的固件。
-UPDATE_NESTED_PACKAGE "luci-app-istorepanel" "linkease/openwrt-app-actions" "main" "applications/luci-app-istorepanel"
 
 # iStore 商店及其任务组件来自同一仓库的嵌套软件包目录。
 UPDATE_NESTED_PACKAGE "luci-app-store" "linkease/istore" "main" "luci/luci-app-store"
