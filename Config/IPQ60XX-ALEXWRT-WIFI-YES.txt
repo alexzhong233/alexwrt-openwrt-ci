@@ -29,7 +29,8 @@ CONFIG_PACKAGE_kmod-nss-wifi-drv=y
 CONFIG_ATH11K_NSS_WIFI=y
 # 自建的 NSS 状态页：读 nss-wifi-drv 的 debugfs（wifili_rx / flows / log），
 # 显示每个 vdev 的收字节、丢弃、Ring 满，以及挂在硬件表上的客户端数。
-# 包本体在 LuCI/luci-app-nss-status，由 Scripts/prepare-luci-packages.sh 拷进构建树。
+# 包本体已独立成仓库 alexzhong233/luci-app-nss-status，由 Scripts/Packages.sh
+# 的 UPDATE_TOPLEVEL_PACKAGE 拉取（别的固件也能直接用）。
 CONFIG_PACKAGE_luci-app-nss-status=y
 
 # 固件内置：NetBird、Dockerman、PassWall、OpenClash

@@ -231,6 +231,10 @@ UPDATE_NESTED_PACKAGE "luci-app-athena-led" \
 	"main" \
 	"luci-app-athena-led"
 UPDATE_TOPLEVEL_PACKAGE "luci-app-harbor-file" "destan19/luci-app-harbor-file" "main"
+# NSS 状态页（读 nss-wifi-drv 的 debugfs）。已独立成仓库，不再放本地 LuCI/。
+# 仓库根目录就是包本身（Makefile 在根上），所以走 TOPLEVEL；换板子只需改页面里的
+# 39000000.nss 设备名。别的固件也能直接用这个仓库。
+UPDATE_TOPLEVEL_PACKAGE "luci-app-nss-status" "alexzhong233/luci-app-nss-status" "main"
 # vlmcsd 换回官方 feeds：核心是 Wind4/vlmcsd（pin 在 2020-03-30 e599080，同一个
 # 程序的不同 fork，激活行为不变），页面是官方 JS 单页，配置走 uci
 # /etc/config/vlmcsd，不再是 mchome 版的 /etc/vlmcsd.ini。
