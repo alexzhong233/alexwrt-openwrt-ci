@@ -1,0 +1,42 @@
+# WorkBuddy2API 的 Docker 部署（替代 OpenWrt 原生包）
+#
+# 用法：
+#   mkdir -p /etc/workbuddy2api/accounts /etc/workbuddy2api/usage
+#   docker compose -f docker-compose.workbuddy2api.yml up -d
+#
+# 与原生包的关系：
+#   原生包把数据放在 /etc/workbuddy2api/{accounts,usage}，容器里是
+#   /app/{accounts,usage}，这里直接挂宿主机那两个目录，所以两边看到的是同一份
+#   数据（accounts/settings.json 里是生成的 API Key 与面板设置）。
+#   但**不要同时运行**：同一端口 8788 会冲突，而且两个进程同时写 settings.json
+#   会互相覆盖。换过去之前先 /etc/init.d/workbuddy2api stop && disable。
+#
+# 网络：1panel-network 是 1Panel 建好的 user-defined 网络，声明成 external
+# 直接复用，不新建、不会被 1Panel 的编排覆盖。容器之间（比如 astrbot）可以用
+# 容器名 wb-proxy:8788 直连；宿主机/局域网访问走下面的 published port。
+
+services:
+  wb-proxy:
+    image: ghcr.io/ardeyouxipianyi/workbuddy2api-hub:latest
+    container_name: wb-proxy
+    restart: unless-stopped
+    # 镜像自带 HEALTHCHECK（/health），这里不重复定义
+    ports:
+      - "8788:8788"
+    environment:
+      - HOST=0.0.0.0
+      - PORT=8788
+      - TZ=Asia/Shanghai
+      # 留空则首次启动自动生成 API Key，写进 accounts/settings.json 并打印在
+      # docker logs 里；想给多台客户端统一配置就填死。
+      # - API_KEY=wb-xxxxxxxx
+    volumes:
+      - /etc/workbuddy2api/accounts:/app/accounts
+      - /etc/workbuddy2api/usage:/app/usage
+    networks:
+      - onepanel
+
+networks:
+  onepanel:
+    external: true
+    name: 1panel-network
