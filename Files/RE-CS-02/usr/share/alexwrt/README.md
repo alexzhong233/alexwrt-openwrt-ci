@@ -38,7 +38,7 @@ config compat 'settings'
 	option watchdog '60'     # 兜底检查间隔，0 关闭
 ```
 
-uci 路径是 `netbird-passwall-compat.settings.mode`。旧固件把它放在 `/etc/config/alexwrt`（段名 `netbird`/`compat`），首次运行时会自动把旧值迁过来，旧文件保留不动。
+uci 路径是 `netbird-passwall-compat.settings.mode`。
 
 默认 `off`，什么都不会跑。切换方式：
 

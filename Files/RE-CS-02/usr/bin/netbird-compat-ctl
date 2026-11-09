@@ -14,9 +14,6 @@ WATCH_BIN="/usr/bin/netbird-passwall-compat-watch.sh"
 APPLY_BIN="/usr/bin/netbird-passwall-compat.sh"
 CFG_FILE="/etc/config/netbird-passwall-compat"
 CFG="netbird-passwall-compat.settings"
-# 旧名字：整机品牌当配置文件用，语义太泛，已改。迁移时读一次。
-OLD_FILE="/etc/config/alexwrt"
-OLD_CFG="alexwrt.compat"
 
 usage() {
 	cat <<'EOF'
@@ -24,7 +21,6 @@ usage() {
   netbird-compat-ctl status                 打印 key=value 状态
   netbird-compat-ctl mode off|watch         切换守护模式
   netbird-compat-ctl watchdog <秒>          兜底检查间隔，0 关闭
-  netbird-compat-ctl ensure                 创建/迁移配置文件（init 启动时也会调用）
   netbird-compat-ctl once                   立即补一次兼容规则
   netbird-compat-ctl netbird-restart        重启 netbird，重建 wt0 转发规则
   netbird-compat-ctl log                    最近 60 行 netbird 相关日志
@@ -115,34 +111,14 @@ get_opt() {
 }
 
 # 配置文件不是任何软件包的 conffile，全新刷机时不存在；而 uci set 作用在不存在
-# 的文件上并不保证成功（各版本行为不一致），所以改配置之前先落一份模板。
+# 的文件上并不保证成功（各版本行为不一致），所以改配置之前先落一份默认模板。
 # /etc/config/ 整个目录本来就在 sysupgrade 的保留清单里，升级不会丢。
-#
-# 旧固件把同样的内容放在 /etc/config/alexwrt（段名 netbird/compat）。那个名字
-# 是整台机器的品牌名，拿它当单个守护的配置太含糊，已改成 netbird-passwall-compat。
-# 迁移时把旧值读过来，旧文件保留不动（删了也没损失，但没必要动用户的东西）。
 ensure_cfg() {
-	local m w
 	[ -f "$CFG_FILE" ] && return 0
-
-	if [ -f "$OLD_FILE" ]; then
-		m=$(uci -q get "$OLD_CFG.mode" 2>/dev/null)
-		w=$(uci -q get "$OLD_CFG.watchdog" 2>/dev/null)
-	fi
-
-	# 旧值只接受已知形状，避免把奇怪内容写回 uci。
-	case "$m" in
-	off | watch) ;;
-	*) m="off" ;;
-	esac
-	case "$w" in
-	'' | *[!0-9]*) w="60" ;;
-	esac
-
-	cat >"$CFG_FILE" <<EOF
+	cat >"$CFG_FILE" <<'EOF'
 config compat 'settings'
-	option mode '${m:-off}'
-	option watchdog '${w:-60}'
+	option mode 'off'
+	option watchdog '60'
 EOF
 	uci -q commit netbird-passwall-compat 2>/dev/null || true
 }
@@ -281,15 +257,6 @@ mode)
 watchdog)
 	set_number watchdog "兜底间隔" "${2:-}"
 	;;
-ensure)
-	ensure_cfg
-	echo "配置文件：$CFG_FILE"
-	[ -f "$CFG_FILE" ] || {
-		echo "创建失败" >&2
-		exit 1
-	}
-	echo "mode=$(get_opt mode off) watchdog=$(get_opt watchdog 60)"
-	;;
 once)
 	[ -x "$APPLY_BIN" ] || {
 		echo "找不到 $APPLY_BIN" >&2
@@ -317,7 +284,7 @@ log)
 	;;
 *)
 	echo "未知子命令：$1" >&2
-	echo "可用：status mode watchdog ensure once netbird-restart log" >&2
+	echo "可用：status mode watchdog once netbird-restart log" >&2
 	exit 1
 	;;
 esac

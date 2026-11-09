@@ -18,21 +18,8 @@ USE_PROCD=1
 TAG="netbird-passwall-compat-watch"
 CFG="netbird-passwall-compat.settings"
 
-# 老固件把这个配置放在 /etc/config/alexwrt，名字太泛、和别的功能混在一起。
-# 新文件不存在时让 ctl 迁移一次；万一迁移失败就退回旧路径，至少不丢功能。
-ensure_cfg() {
-	[ -f /etc/config/netbird-passwall-compat ] && return 0
-	[ -x /usr/bin/netbird-compat-ctl ] && \
-		/usr/bin/netbird-compat-ctl ensure >/dev/null 2>&1
-	[ -f /etc/config/netbird-passwall-compat ] && return 0
-	[ -f /etc/config/alexwrt ] && CFG="alexwrt.compat"
-	return 0
-}
-
 start_service() {
 	local mode watchdog
-
-	ensure_cfg
 
 	mode=$(uci -q get "$CFG.mode" 2>/dev/null)
 	if [ "$mode" != "watch" ]; then
