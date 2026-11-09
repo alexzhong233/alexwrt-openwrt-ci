@@ -27,6 +27,12 @@ services:
       - HOST=0.0.0.0
       - PORT=8788
       - TZ=Asia/Shanghai
+      # 原生 init.d 里的 uci stats_ttl 就是通过这两个环境变量传下去的。
+      # 不写的话容器用应用默认的 15 秒：每次缓存过期都要全量重扫 usage.jsonl
+      # （这台机器 2 万行约 12 秒），面板会一直忙于重建。900 秒 + 宿主机的
+      # workbuddy2api-warm 预热，是这套配置在 OpenWrt 上跑得动的前提。
+      - WB_STATS_TTL=900
+      - WB_COUNT_TTL=900
       # 留空则首次启动自动生成 API Key，写进 accounts/settings.json 并打印在
       # docker logs 里；想给多台客户端统一配置就填死。
       # - API_KEY=wb-xxxxxxxx
