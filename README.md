@@ -114,7 +114,7 @@ curl -L -o /usr/share/v2ray/geosite.dat \
 
 ## 脚本
 
-固件里的脚本都在 `/usr/bin/`，默认不启动。NetBird 兼容守护由 `/etc/config/alexwrt` 的 `mode` 显式开关（默认 `off`），其他脚本只在明确执行命令后才检查或修改配置。
+固件里的脚本都在 `/usr/bin/`，默认不启动。NetBird 兼容守护由 `/etc/config/netbird-passwall-compat` 的 `mode` 显式开关（默认 `off`），其他脚本只在明确执行命令后才检查或修改配置。
 
 ### NetBird 兼容守护
 

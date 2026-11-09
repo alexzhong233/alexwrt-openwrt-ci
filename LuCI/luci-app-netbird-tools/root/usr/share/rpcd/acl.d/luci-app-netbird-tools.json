@@ -10,7 +10,7 @@
 			"file": {
 				"/usr/bin/netbird-compat-ctl": [ "exec" ]
 			},
-			"uci": [ "alexwrt" ]
+			"uci": [ "netbird-passwall-compat" ]
 		}
 	}
 }

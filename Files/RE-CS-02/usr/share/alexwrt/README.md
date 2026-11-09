@@ -30,13 +30,15 @@
 
 固件只带一个兼容守护：`netbird-passwall-compat-watch`，事件驱动。它用 `nft monitor` 订阅规则变更，NetBird 重建 `netbird-mangle-prerouting` 链后立即补回 PassWall 的 mark 豁免；另有 60 秒兜底全量检查，防止 monitor 丢事件。实际改规则的实现是 `/usr/bin/netbird-passwall-compat.sh`，它只作为前者的执行核心，不再单独注册服务。
 
-它由 `/etc/config/alexwrt` 控制：
+它由 `/etc/config/netbird-passwall-compat` 控制：
 
 ```
-config netbird 'compat'
+config compat 'settings'
 	option mode 'off'        # off（默认）| watch
 	option watchdog '60'     # 兜底检查间隔，0 关闭
 ```
+
+uci 路径是 `netbird-passwall-compat.settings.mode`。旧固件把它放在 `/etc/config/alexwrt`（段名 `netbird`/`compat`），首次运行时会自动把旧值迁过来，旧文件保留不动。
 
 默认 `off`，什么都不会跑。切换方式：
 
