@@ -144,7 +144,9 @@ LuCI 里是「服务 → NetBird 工具」，能看状态、切模式、立即�
 cat /proc/net/dev | grep tun             # 隔 10 秒看两次，tun163 的 RX/TX 在涨就是流量真的走了隧道
 ```
 
-这个显示问题没有修。原因是它只影响展示：`ip rule` 的 `from <设备IP> lookup <表>`、`table 179` 里的 `dev tun163` 路由、`/proc/net/dev` 的字节增长全都不依赖那个文件，手机 App 侧也能正常绑定。代价是失去了一个真实的状态指示——首次注册确实没完成时，页面同样显示「正在注册」，此时以 App 为准。
+这个问题在 OEM 构建上已经处理（`8693454`）：厂商版本来就不依赖那个文件，现在只要进程在、与网易的长连接已建立就显示就绪，绑定状态以 App 为准。通用版（`arch=auto`）仍按三条件判定，重启后会一直显示「正在注册」——`activate_status` 只在首次绑定时写一次，之后永不更新。
+
+它只影响展示：`ip rule` 的 `from <设备IP> lookup <表>`、`table 179` 里的 `dev tun163` 路由、`/proc/net/dev` 的字节增长全都不依赖那个文件，手机 App 侧也能正常绑定。
 
 两个容易误判的地方：`nft list tables | grep XU_ACC` 为空是正常的（OEM 构建只建策略路由，不建这些表）；两次 `uu-detect` 的 `cloud=` 地址不同也正常（有多个控制节点，取第一条 ESTABLISHED）。
 
@@ -159,19 +161,19 @@ UU 加速某台设备时，会动两类规则来抢 DNS：
 
 **关键差别：UU 停止加速会清掉 `ip rule`、`tun163` 和 nat 规则，但不会清 ip6tables 里那两条 DROP。** 所以「用 UU 加速过一次」之后，这台设备的 IPv6 解析会一直失败到下次重启，而且没有任何提示——浏览器走 DoH 照常能开网页，只有系统解析和命令行工具受影响。
 
-`uu-dns-guard` 每 3 秒做两件事，幂等、只在有变化时写日志：
+这两件事现在由插件自己做。本仓库拉的是 [fork 版 `luci-app-uugamebooster`](https://github.com/alexzhong233/luci-app-uugamebooster)（见 `Scripts/Packages.sh` 的 `UPDATE_PACKAGE`），它自带 `uu-passwall-sync`：`/etc/init.d/uuplugin` 在 `passwall_mode=cooperative`（默认）且 `/etc/config/passwall` 存在时启动它，每 `passwall_interval`（默认 5 秒）把「发往路由器自己的 UDP/53」的 `RETURN` 顶回 `nat PREROUTING` 第 1 位，并删掉 `ip6tables filter` 里那两条 DROP。
 
-1. 把「发往路由器自己的 UDP/53」的 `RETURN` 顶到 `nat PREROUTING` 第 1 位（只拦目的地是路由器的查询，不影响 UU 处理其余流量）；
-2. 删掉 `ip6tables filter` 里针对 UDP/53 的 DROP。
+几个与旧脚本不同的地方：
 
-```sh
-/etc/init.d/uu-dns-guard enable && /etc/init.d/uu-dns-guard start
-/etc/init.d/uu-dns-guard stop && /etc/init.d/uu-dns-guard disable   # 关闭
-```
+- 按设备逐一处理（`-s <ip>` / `--mac-source <MAC>`），不是一律放行 53 端口；
+- 判据是「同一台设备的第一条 dport 53 规则是不是 RETURN」——UU 每次开始加速都会把自己的 DNAT `-I` 到第 1 位，只查「RETURN 存在」会误判成已生效；
+- 关掉集成或停服务时会把插进去的规则收干净，不留残余。
 
-默认不启用。与 `netbird-passwall-compat-watch` 互不干扰：那个处理 netbird 的 mark 豁免，这个处理 UU 的 DNS 干扰，触发条件不同，刻意分成两个脚本。
+开关在 LuCI 的「服务 → UU 加速器 → PassWall」，状态页会显示当前豁免了几台被加速设备。
 
-不装这个守护也有办法绕开：把设备的 DNS 收敛到 IPv4 的 `192.168.88.1`（或直接关掉网卡的 IPv6），IPv6 DNS 那条路本来就已经通过 `uci set dhcp.lan.ra_dns='0'` 停止下发了。
+早先独立的 `uu-dns-guard`（`/usr/bin/uu-dns-guard.sh` + `/etc/init.d/uu-dns-guard`）已从固件删除：它一直是默认不启用，功能与插件重复，而且只做全局放行、不区分设备。如果某个旧固件曾 `enable` 过它，升级后 `/etc/rc.d` 里可能留下一个指向已删文件的符号链接，`rm -f /etc/rc.d/S99uu-dns-guard` 即可。
+
+不开这个集成也有办法绕开：把设备的 DNS 收敛到 IPv4 的 `192.168.88.1`（或直接关掉网卡的 IPv6），IPv6 DNS 那条路本来就已经通过 `uci set dhcp.lan.ra_dns='0'` 停止下发了。
 
 ### 升级辅助
 
