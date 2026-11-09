@@ -76,10 +76,13 @@ return view.extend({
 		if (procs > running)
 			watchText += ' · ' + _('子进程') + ' ' + (procs - running);
 
+		/* value 可以是字符串，也可以是节点数组（同一格里放多个 badge）。
+		 * 数组必须直接展开成 td 的子节点，否则 [ value ] 会把它当成单个
+		 * 子节点，E() 不递归展开数组，最终渲染成 "[object HTMLSpanElement]"。 */
 		function row(label, value) {
 			return E('tr', { 'class': 'tr' }, [
 				E('td', { 'class': 'td', 'style': 'width:38%' }, [ label ]),
-				E('td', { 'class': 'td' }, [ value ])
+				E('td', { 'class': 'td' }, Array.isArray(value) ? value : [ value ])
 			]);
 		}
 
