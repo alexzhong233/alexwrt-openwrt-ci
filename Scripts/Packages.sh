@@ -346,7 +346,16 @@ rm -rf ./package/packages/sing-box
 #     顺带少 clone 一个自带整套 Qt6 的大仓库。
 UPDATE_PACKAGE "diskmanager" "4IceG/luci-app-mini-diskmanager" "main"
 UPDATE_PACKAGE "mosdns" "sbwml/luci-app-mosdns" "v5" "" "v2dat"
-UPDATE_PACKAGE "uugamebooster" "xiaodoudou/luci-app-uugamebooster" "master" "pkg"
+# UU 走自建 fork（基于 xiaodoudou/luci-app-uugamebooster，每天自动合并上游）：
+#   · uu-passwall-sync：把「发往路由器本机的 udp/53」RETURN 顶在 UU 的
+#     DNAT 前面，并删掉它在 ip6tables filter 里那两条 udp/53 DROP。没有它，
+#     被加速设备绕过 passwall 的 DNS 链，且 UU 停止加速时不清那两条 DROP，
+#     设备的 IPv6 解析会一直坏到重启。
+#   · uu-state：注册记录 activate_status 原本写在 /var/tmp/uu（tmpfs），
+#     重启即丢，等于每次开机都要重新向网易注册。
+#   · 菜单从 admin/services 移到 admin/vpn。
+# 上游仍在 xiaodoudou/luci-app-uugamebooster，冲突时以那边为准重新对齐。
+UPDATE_PACKAGE "uugamebooster" "alexzhong233/luci-app-uugamebooster" "master" "pkg"
 UPDATE_PACKAGE "quickfile" "sbwml/luci-app-quickfile" "main"
 # OpenList 用 sbwml 的 luci-app-openlist2：仓库顶层同时带 openlist2（二进制与
 # init）和 luci-app-openlist2（界面），整个 clone 进 package/ 即可，不需要 feeds。
