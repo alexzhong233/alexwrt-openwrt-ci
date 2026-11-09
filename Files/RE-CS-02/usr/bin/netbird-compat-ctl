@@ -131,9 +131,9 @@ do_status() {
 	watchdog=$(get_opt watchdog 60)
 
 	if is_enabled netbird; then nb_en=1; else nb_en=0; fi
-	# 只认"netbird 且 service run"的进程。/usr/libexec/netbird-real service run
-	# 和 /usr/sbin/netbird service run 都能命中；关键字 netbird 单独用会误判，
-	# 因为 netbird-passwall-compat*.sh 这些脚本名里也带 netbird。
+	# 只认"netbird 且 service run"的进程：daemon 的 cmdline 是
+	# /usr/sbin/netbird service run，两个关键字必须同时出现。单用 netbird
+	# 会误判，因为 netbird-passwall-compat*.sh 这些脚本名里也带 netbird。
 	if is_running netbird "service run"; then
 		nb_run=1
 	else
