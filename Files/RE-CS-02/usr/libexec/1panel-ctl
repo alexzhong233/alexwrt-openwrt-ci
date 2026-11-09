@@ -1,22 +1,41 @@
 #!/bin/sh
-# 1Panel 容器的状态查询与生命周期操作。
+# 1Panel 容器的状态查询、部署与生命周期操作。
 #
-# 1Panel 官方不发布 Docker 镜像，也不支持在没有 systemd 的系统上安装（OpenWrt
-# 用 procd）。能在这台机器上跑起来的只有社区镜像，其中 moelin/1panel 同时提供
-# v1/v2、arm64 与国内外两个源，所以这里按它的约定部署：host 网络、挂
-# /var/run/docker.sock、数据落在 -v <datadir>:/opt。
+# 两种跑法，用 uci 的 kind 选：
 #
-# 容器名、镜像、端口、入口路径都存在 uci 里，LuCI 页面读同一份配置。
+#   istore   linkease/istorepanel —— 容器里跑 systemd，镜像本身不含 1Panel，
+#            首次要 exec 进容器执行 /app/reinstall.sh 从官方源装 1Panel。
+#            功能最接近裸机（系统/防火墙模块能用），但重（253MB）且启动慢。
+#            这是 LinkEase 给 OpenWrt 做的方案，参数照抄它的 istorepanel.sh。
+#
+#   moelin   moelin/1panel —— Ubuntu + Supervisor，镜像自带 1Panel，docker run
+#            就行，轻、快，但系统类模块读的是容器内部。
+#
+# 1Panel 官方不发布 Docker 镜像，这两个都是社区维护的。
 
 CONTAINER=$(uci -q get 1panel.main.container)
-[ -n "$CONTAINER" ] || CONTAINER="1panel"
+[ -n "$CONTAINER" ] || CONTAINER="istorepanel"
+
+KIND=$(uci -q get 1panel.main.kind)
+[ -n "$KIND" ] || KIND="istore"
+
 IMAGE=$(uci -q get 1panel.main.image)
-[ -n "$IMAGE" ] || IMAGE="moelin/1panel:v2"
+[ -z "$IMAGE" ] && {
+	if [ "$KIND" = "moelin" ]; then IMAGE="moelin/1panel:v2"; else IMAGE="linkease/istorepanel:latest"; fi
+}
+
 PORT=$(uci -q get 1panel.main.port)
 [ -n "$PORT" ] || PORT="10086"
+
 USERNAME=$(uci -q get 1panel.main.username)
-[ -n "$USERNAME" ] || USERNAME="admin"
+[ -n "$USERNAME" ] || USERNAME="1panel"
+
 ENTRANCE=$(uci -q get 1panel.main.entrance)
+[ -n "$ENTRANCE" ] || ENTRANCE="entrance"
+
+PANELVER=$(uci -q get 1panel.main.ver)
+[ -n "$PANELVER" ] || PANELVER="v1.10.34-lts"
+
 DATADIR=$(uci -q get 1panel.main.datadir)
 [ -n "$DATADIR" ] || DATADIR="/mnt/sda1/Configs/1Panel"
 
@@ -26,11 +45,14 @@ LANIP=$(uci -q get network.lan.ipaddr)
 save_cfg() {
 	uci -q get 1panel.main >/dev/null 2>&1 || uci -q set 1panel.main='1panel'
 	uci -q set "1panel.main.container=$CONTAINER"
+	uci -q set "1panel.main.kind=$KIND"
 	uci -q set "1panel.main.image=$IMAGE"
 	uci -q set "1panel.main.port=$PORT"
 	uci -q set "1panel.main.username=$USERNAME"
+	uci -q set "1panel.main.entrance=$ENTRANCE"
+	uci -q set "1panel.main.ver=$PANELVER"
 	uci -q set "1panel.main.datadir=$DATADIR"
-	[ -n "$ENTRANCE" ] && uci -q set "1panel.main.entrance=$ENTRANCE"
+	[ -n "$ENVPASS" ] && uci -q set "1panel.main.password=$ENVPASS"
 	uci -q commit 1panel
 }
 
@@ -42,18 +64,29 @@ url_of() {
 	fi
 }
 
+panel_version() {
+	local v
+
+	v=$(docker exec "$CONTAINER" 1pctl version 2>/dev/null | sed -n 's/^version: *//p' | head -n1)
+	[ -n "$v" ] || v=$(docker exec "$CONTAINER" 1panel --version 2>/dev/null | head -n1)
+	echo "$v"
+}
+
 cmd_status() {
 	local state installed running
+
+	echo "kind=$KIND"
+	echo "container=$CONTAINER"
+	echo "image=$IMAGE"
+	echo "port=$PORT"
+	echo "entrance=$ENTRANCE"
+	echo "username=$USERNAME"
+	echo "datadir=$DATADIR"
+	echo "address=$(url_of)"
 
 	if ! docker inspect "$CONTAINER" >/dev/null 2>&1; then
 		echo "installed=0"
 		echo "running=0"
-		echo "container=$CONTAINER"
-		echo "image=$IMAGE"
-		echo "port=$PORT"
-		echo "entrance=$ENTRANCE"
-		echo "datadir=$DATADIR"
-		echo "address=$(url_of)"
 		return 0
 	fi
 
@@ -64,34 +97,50 @@ cmd_status() {
 	echo "installed=$installed"
 	echo "running=$running"
 	echo "state=${state:-unknown}"
-	echo "container=$CONTAINER"
-	echo "image=$(docker inspect -f '{{.Config.Image}}' "$CONTAINER" 2>/dev/null)"
 	echo "created=$(docker inspect -f '{{.Created}}' "$CONTAINER" 2>/dev/null | cut -c1-10)"
-	echo "port=$PORT"
-	echo "entrance=$ENTRANCE"
-	echo "datadir=$DATADIR"
-	echo "address=$(url_of)"
 
-	# 1pctl 在 v1/v2 里输出格式不同，只取 version 那一行，取不到就留空。
-	if [ "$running" = "1" ]; then
-		echo "version=$(docker exec "$CONTAINER" 1pctl version 2>/dev/null \
-			| sed -n 's/^version: *//p' | head -n1)"
-	fi
+	[ "$running" = "1" ] && echo "version=$(panel_version)"
 	return 0
 }
 
-cmd_install() {
-	# 参数：port user pass entrance [datadir]
-	[ -n "$1" ] && PORT="$1"
-	[ -n "$2" ] && USERNAME="$2"
-	[ -n "$4" ] && ENTRANCE="$4"
-	[ -n "$5" ] && DATADIR="$5"
+# systemd 那一套：容器里要能当 PID 1 跑起来，所以 cgroup 命名空间用宿主机的，
+# 并给 SYS_ADMIN。/var/run 挂到 /var2/run，避免盖掉容器自己的 /var/run。
+run_istore() {
+	local rslave=""
 
-	docker inspect "$CONTAINER" >/dev/null 2>&1 && {
-		echo "容器 $CONTAINER 已存在，先卸载或改名" >&2
-		return 1
-	}
+	mkdir -p "$DATADIR" || return 1
+	save_cfg
 
+	cat >"$DATADIR/env" <<EOF
+export PANEL_BASE_DIR=${DATADIR}
+export PANEL_PORT=${PORT}
+export DEFAULT_ENTRANCE=${ENTRANCE}
+export DEFAULT_USERNAME=${USERNAME}
+export DEFAULT_PASSWORD=${ENVPASS}
+export PANELVER=${PANELVER}
+EOF
+
+	mountpoint -q /mnt && rslave=":rslave"
+
+	docker run --restart=unless-stopped -d \
+		-h 1PanelServer \
+		--cgroupns=host \
+		--cap-add SYS_ADMIN \
+		--tmpfs /tmp \
+		--network host \
+		-v /sys/fs/cgroup:/sys/fs/cgroup \
+		-v /var/run:/var2/run \
+		-v "$DATADIR:/iStorePanel" \
+		-v "/mnt:/mnt$rslave" \
+		-e TZ=Asia/Shanghai \
+		--name "$CONTAINER" \
+		"$IMAGE" || return 1
+
+	echo "容器已启动，systemd 就绪后需要再点一次「初始化」执行 reinstall.sh"
+	return 0
+}
+
+run_moelin() {
 	mkdir -p "$DATADIR" || return 1
 	save_cfg
 
@@ -104,13 +153,83 @@ cmd_install() {
 		-e TZ=Asia/Shanghai \
 		-e PORT="$PORT" \
 		-e USERNAME="$USERNAME" \
-		-e PASSWORD="$3" \
+		-e PASSWORD="$ENVPASS" \
 		-e ENTRANCE="$ENTRANCE" \
 		"$IMAGE" || return 1
 
-	echo "已启动容器 $CONTAINER，镜像 $IMAGE"
-	echo "访问：$(url_of)"
-	echo "首次初始化需要 20-60 秒，用 docker logs -f $CONTAINER 查看进度"
+	echo "容器已启动，首次初始化约 20-60 秒"
+	return 0
+}
+
+cmd_install() {
+	# 参数：port user pass entrance datadir [kind]
+	[ -n "$1" ] && PORT="$1"
+	[ -n "$2" ] && USERNAME="$2"
+	[ -n "$3" ] && ENVPASS="$3"
+	[ -n "$4" ] && ENTRANCE="$4"
+	[ -n "$5" ] && DATADIR="$5"
+	[ -n "$6" ] && KIND="$6"
+
+	case "$KIND" in
+		istore) [ -n "$(uci -q get 1panel.main.image)" ] || IMAGE="linkease/istorepanel:latest" ;;
+		moelin) [ -n "$(uci -q get 1panel.main.image)" ] || IMAGE="moelin/1panel:v2" ;;
+		*)
+			echo "未知的 kind：$KIND（只支持 istore / moelin）" >&2
+			return 1
+			;;
+	esac
+
+	# 数据目录必须在 /mnt 下：1Panel 的数据库、应用、备份都写这里，落在 overlay
+	# 上会很快把 flash 写满，而且 sysupgrade 时会被清空。LinkEase 的安装脚本在
+	# 这里直接拒绝非 /mnt 路径，保持一致。
+	case "$DATADIR" in
+		/mnt/*) ;;
+		*)
+			echo "数据目录必须位于 /mnt 下（当前：$DATADIR）" >&2
+			return 2
+			;;
+	esac
+
+	docker inspect "$CONTAINER" >/dev/null 2>&1 && {
+		echo "容器 $CONTAINER 已存在，请先卸载或换名字" >&2
+		return 1
+	}
+
+	if [ "$KIND" = "moelin" ]; then
+		run_moelin
+	else
+		run_istore
+	fi
+	return $?
+}
+
+# istore 镜像里的 1Panel 是运行时装的：容器起来后必须执行一次 reinstall.sh。
+# 这一步要从官方源下载几百 MB，耗时不确定，所以丢到后台跑，页面靠轮询
+# status 里的 version 判断装完没有；日志写到 /tmp 方便排查。
+cmd_bootstrap() {
+	local v
+
+	docker inspect "$CONTAINER" >/dev/null 2>&1 || {
+		echo "容器不存在" >&2
+		return 1
+	}
+
+	v=$(panel_version)
+	if [ -n "$v" ]; then
+		echo "1Panel 已经装好了：$v"
+		return 0
+	fi
+
+	[ "$(docker inspect -f '{{.State.Status}}' "$CONTAINER" 2>/dev/null)" = "running" ] || {
+		echo "容器没有运行，先启动容器" >&2
+		return 1
+	}
+
+	setsid sh -c "docker exec $CONTAINER /app/reinstall.sh >/tmp/1panel-bootstrap.log 2>&1" \
+		</dev/null >/dev/null 2>&1 &
+
+	echo "已在后台执行 reinstall.sh（下载几百 MB，视网速几十秒到几分钟）"
+	echo "完成后刷新页面即可看到版本号；日志：/tmp/1panel-bootstrap.log"
 	return 0
 }
 
@@ -118,15 +237,18 @@ case "$1" in
 status)
 	cmd_status
 	;;
+install)
+	cmd_install "$2" "$3" "$4" "$5" "$6" "$7"
+	;;
+bootstrap)
+	cmd_bootstrap
+	;;
 start | stop | restart)
 	docker inspect "$CONTAINER" >/dev/null 2>&1 || {
 		echo "容器 $CONTAINER 不存在" >&2
 		exit 1
 	}
 	docker "$1" "$CONTAINER" 2>&1
-	;;
-install)
-	cmd_install "$2" "$3" "$4" "$5" "$6"
 	;;
 remove)
 	docker stop "$CONTAINER" >/dev/null 2>&1
@@ -136,7 +258,7 @@ logs)
 	docker logs --tail 60 "$CONTAINER" 2>&1
 	;;
 *)
-	echo "用法：1panel-ctl status|start|stop|restart|install <port> <user> <pass> <entrance> [datadir]|remove|logs" >&2
+	echo "用法：1panel-ctl status|install <port> <user> <pass> <entrance> <datadir> <kind>|bootstrap|start|stop|restart|remove|logs" >&2
 	exit 1
 	;;
 esac

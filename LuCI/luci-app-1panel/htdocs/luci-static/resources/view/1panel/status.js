@@ -85,8 +85,12 @@ return view.extend({
 			? badge(running, _('运行中'), _('已停止'))
 			: badge(false, '', _('未部署'))));
 
+		rows = rows.concat(row(_('运行方式'), st.kind === 'moelin'
+			? _('轻量版 moelin/1panel —— 镜像自带面板，启动快，系统类模块读的是容器内部')
+			: _('完整版 linkease/istorepanel —— 容器内跑 systemd，系统/防火墙模块可用')));
+
 		if (installed) {
-			rows = rows.concat(row(_('版本'), st.version || muted(_('读取中…'))));
+			rows = rows.concat(row(_('版本'), st.version || muted(_('尚未初始化，点下面的「初始化 1Panel」'))));
 			rows = rows.concat(row(_('容器'), E('code', {}, [ st.container || '—' ])));
 			rows = rows.concat(row(_('镜像'), E('code', {}, [ st.image || '—' ])));
 			rows = rows.concat(row(_('创建于'), st.created || '—'));
@@ -94,6 +98,7 @@ return view.extend({
 		}
 
 		rows = rows.concat(row(_('监听端口'), st.port || '—'));
+		rows = rows.concat(row(_('登录账号'), st.username || '—'));
 		rows = rows.concat(row(_('入口路径'), st.entrance
 			? E('code', {}, [ st.entrance ])
 			: muted(_('未设置（首次启动时由容器自行生成，见日志）'))));
@@ -188,10 +193,24 @@ return view.extend({
 			}
 
 			var fPort = field(_('监听端口'), '10086');
-			var fUser = field(_('管理员账号'), 'admin');
-			var fPass = field(_('管理员密码'), '', 'password', _('8 位以上'));
-			var fEnt  = field(_('入口路径'), '', 'text', _('例如 panel-8x3k，别用 admin'));
+			var fUser = field(_('登录账号'), '1panel');
+			var fPass = field(_('登录密码'), '', 'password', _('8 位以上，别用 password'));
+			var fEnt  = field(_('入口路径'), '', 'text', _('例如 panel-8x3k，别用 entrance'));
 			var fDir  = field(_('数据目录'), st.datadir || '/mnt/sda1/Configs/1Panel');
+
+			/* 完整版要在容器里跑 systemd，必须 host 网络、cgroupns=host、SYS_ADMIN；
+			 * 轻量版镜像自带面板，docker run 就能用。两者数据布局不同，装完不能互换。 */
+			var kindSel = E('select', { 'class': 'cbi-input-select' }, [
+				E('option', { 'value': 'istore' },
+					[ _('完整版 — linkease/istorepanel（容器内 systemd，功能接近裸机）') ]),
+				E('option', { 'value': 'moelin' },
+					[ _('轻量版 — moelin/1panel（镜像自带面板，启动快）') ])
+			]);
+
+			var kindNodes = [
+				E('label', {}, [ _('运行方式') ]),
+				kindSel
+			];
 
 			installPanel = E('div', { 'class': 'cbi-section' }, [
 				E('h3', {}, [ _('部署 1Panel') ]),
@@ -199,7 +218,7 @@ return view.extend({
 					_('镜像用社区维护的 moelin/1panel（官方不发布 Docker 镜像）。容器以 host 网络运行，挂载 docker.sock 与数据目录。首次初始化需要 20-60 秒。')
 				]),
 				E('div', { 'class': 'p1-form', 'style': 'margin-top:1rem' },
-					[].concat(fPort.nodes, fUser.nodes, fPass.nodes, fEnt.nodes, fDir.nodes)),
+					[].concat(kindNodes, fPort.nodes, fUser.nodes, fPass.nodes, fEnt.nodes, fDir.nodes)),
 				E('div', { 'style': 'margin-top:1rem' }, [
 					E('button', {
 						'class': 'btn cbi-button cbi-button-apply',
@@ -211,8 +230,15 @@ return view.extend({
 								return;
 							}
 
+							if (fDir.input.value.indexOf('/mnt/') !== 0) {
+								ui.addNotification(null, E('p', {}, [
+									_('数据目录必须在 /mnt 下：1Panel 的数据库和应用都写在这里，放 overlay 会写满 flash，刷机也会丢。')
+								]), 'warning');
+								return;
+							}
+
 							return run([ 'install', fPort.input.value, fUser.input.value,
-								fPass.input.value, fEnt.input.value, fDir.input.value ],
+								fPass.input.value, fEnt.input.value, fDir.input.value, kindSel.value ],
 								_('部署容器'), true);
 						}
 					}, [ _('部署') ])
@@ -222,23 +248,33 @@ return view.extend({
 		}
 
 		/* ---- 已部署：操作按钮 ---- */
+		/* istore 镜像里的 1Panel 是运行时才装的：容器起来但 1pctl 还没有，
+		 * 说明 reinstall.sh 没跑过。这时单独给一个「初始化」按钮，避免把
+		 * 几百 MB 的下载塞进 docker run 里让页面超时。 */
+		var ops = [
+			running
+				? actionButton(_('停止'), [ 'stop' ])
+				: actionButton(_('启动'), [ 'start' ]),
+			actionButton(_('重启'), [ 'restart' ]),
+			actionButton(_('查看日志'), [ 'logs' ])
+		];
+
+		if (running && !st.version)
+			ops.push(actionButton(_('初始化 1Panel'), [ 'bootstrap' ]));
+
+		ops.push(E('a', {
+			'class': 'btn cbi-button cbi-button-action',
+			'href': st.address || '#',
+			'target': '_blank',
+			'rel': 'noopener',
+			'style': 'margin-right:.5rem;margin-bottom:.5rem'
+		}, [ _('打开面板') ]));
+
+		ops.push(actionButton(_('卸载容器'), [ 'remove' ], true));
+
 		var opsPanel = E('div', { 'class': 'cbi-section p1-actions' }, [
 			E('h3', {}, [ _('操作') ]),
-			E('div', {}, [
-				running
-					? actionButton(_('停止'), [ 'stop' ])
-					: actionButton(_('启动'), [ 'start' ]),
-				actionButton(_('重启'), [ 'restart' ]),
-				actionButton(_('查看日志'), [ 'logs' ]),
-				E('a', {
-					'class': 'btn cbi-button cbi-button-action',
-					'href': st.address || '#',
-					'target': '_blank',
-					'rel': 'noopener',
-					'style': 'margin-right:.5rem;margin-bottom:.5rem'
-				}, [ _('打开面板') ]),
-				actionButton(_('卸载容器'), [ 'remove' ], true)
-			]),
+			E('div', {}, ops),
 			out
 		]);
 
