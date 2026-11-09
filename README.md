@@ -68,6 +68,44 @@ set ${s}.country='${country || 'US'}'
 
 软件包在 CI 里由 `Scripts/Packages.sh` 下载进编译树，仓库不保存编译好的 `.ipk`。脚本装到 `/usr/bin/`，说明文档装到 `/usr/share/alexwrt/`，都不注册为常驻服务。逐包核对见 [docs/SOFTWARE-AUDIT.md](docs/SOFTWARE-AUDIT.md)。
 
+## 刷机后：PassWall 的 Geo 规则（必做一次）
+
+保留配置升级后，PassWall 的分流节点会失效，日志里是这一句：
+
+```
+* 缺少Geo规则文件，TCP Sing-Box分流节点无法正常使用！
+```
+
+原因是 Geo 数据文件不在 `/etc/config/` 里，而在 `/usr/share/v2ray/`（`geoip.dat`、`geosite.dat`），属于 overlay 层。`sysupgrade` 会清空整个 overlay，所以每次刷机都会丢；`keep.d` 也覆盖不到这个路径。分流节点（如 `Doyo 专用分流`）强依赖 `geosite.dat`，缺了它 sing-box 的域名分流规则直接不可用。
+
+处理方式：LuCI → 服务 → PassWall → **规则管理** → 手动更新。`Geosite 更新URL` 选 **`MetaCubeX/geosite (CDN)`**（`LoyalSolder` 的 CDN 源实测会失败）。更新完核对：
+
+```sh
+ls -lh /usr/share/v2ray/geo*.dat
+# geoip.dat   约 15.7 MB
+# geosite.dat 约 4.2 MB
+```
+
+两个文件都在就说明好了；`/tmp/etc/passwall_tmp/geodata/` 里那两个只是指向它们的符号链接，不用管。
+
+规则管理点不动时手动下载（目录就是 `/usr/share/v2ray/`）：
+
+```sh
+curl -L --connect-timeout 10 -o /usr/share/v2ray/geosite.dat \
+  https://cdn.jsdelivr.net/gh/MetaCubeX/meta-rules-dat@release/geosite.dat
+# jsdelivr 不通时换镜像
+curl -L -o /usr/share/v2ray/geosite.dat \
+  https://ghfast.top/https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/release/geosite.dat
+/etc/init.d/passwall restart
+```
+
+几点补充：
+
+- **只有 `geosite.dat` 是必需的**（4.2 MB）。`geoip.dat` 有 15.7 MB，而 IP 层分流的国内网段已由 `chnroute`（约 137 KB）覆盖，不下也能用。
+- 目前没有把这些文件打进固件，因为会让镜像涨 20 MB；如果以后想彻底免掉这一步，把 `geosite.dat` 放进 `Files/RE-CS-02/usr/share/v2ray/` 即可。
+- 开关 PassWall 统一用 `/etc/init.d/passwall restart`。`start` 会撞上「Upgrade or overload residue is detected」而跳过完整初始化，表现是 `ip rule` 里没有 `999: from all fwmark 0x50535731 lookup 999`、`ip route show table 999` 报 `FIB table does not exist`，看起来像代理坏了其实只是没起来。
+- 排查透明代理是否真的生效，别只看 `nft list ruleset | grep psw`（那 100 多条大多是 set 定义）。看 `chain PSW_MANGLE` 里的计数器是否在涨，再看 `ip route show table 999` 有没有 `local default dev lo scope host`——这条 local 路由是 tproxy 把包交回本地进程的唯一通路，缺了就是「规则全对、代理全废」。
+
 ## 软件源与固件文件
 
 - 软件源保留上游默认：`/etc/apk/repositories.d/distfeeds.list` 由 base-files 在编译时按 `feeds.conf.default` 自动生成（指向 downloads.immortalwrt.org），仓库不覆盖它。
