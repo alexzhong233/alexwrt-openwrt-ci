@@ -1,28 +1,21 @@
 #!/bin/sh
-# 1Panel 容器的状态查询、部署与生命周期操作。
+# 1Panel v2 裸机版的状态查询、安装、更新与生命周期操作。
 #
-# 两种跑法，用 uci 的 kind 选：
+# 官方安装脚本原生支持 OpenWrt：包里 initscript/ 目录同时提供 systemd、
+# openrc、sysv 和 procd 四套，检测到 /etc/rc.common 就用 procd。所以这里
+# 不再走容器那条路，直接铺文件、注册 procd 服务。
 #
-#   istore   linkease/istorepanel —— 容器里跑 systemd，镜像本身不含 1Panel，
-#            首次要 exec 进容器执行 /app/reinstall.sh 从官方源装 1Panel。
-#            功能最接近裸机（系统/防火墙模块能用），但重（253MB）且启动慢。
-#            这是 LinkEase 给 OpenWrt 做的方案，参数照抄它的 istorepanel.sh。
-#
-#   moelin   moelin/1panel —— Ubuntu + Supervisor，镜像自带 1Panel，docker run
-#            就行，轻、快，但系统类模块读的是容器内部。
-#
-# 1Panel 官方不发布 Docker 镜像，这两个都是社区维护的。
+# 一切读写都在数据目录（默认 /mnt/sda1/Configs/1Panel）里，overlay 只放
+# 两个二进制（约 152MB）。升级不需要动数据，sysupgrade 也不需要备份它们：
+# 刷完机重跑一次 install 即可，脚本靠 db/core.db 识别已有数据并保留账号。
 
-CONTAINER=$(uci -q get 1panel.main.container)
-[ -n "$CONTAINER" ] || CONTAINER="istorepanel"
+BASE_URL="https://resource.fit2cloud.com/1panel/package/v2/stable"
+BIN_DIR="/usr/local/bin"
+INIT_DIR="/etc/init.d"
+TASK_DIR="/var/run/1panel-task"
 
-KIND=$(uci -q get 1panel.main.kind)
-[ -n "$KIND" ] || KIND="istore"
-
-IMAGE=$(uci -q get 1panel.main.image)
-[ -z "$IMAGE" ] && {
-	if [ "$KIND" = "moelin" ]; then IMAGE="moelin/1panel:v2"; else IMAGE="linkease/istorepanel:latest"; fi
-}
+DATADIR=$(uci -q get 1panel.main.datadir)
+[ -n "$DATADIR" ] || DATADIR="/mnt/sda1/Configs/1Panel"
 
 PORT=$(uci -q get 1panel.main.port)
 [ -n "$PORT" ] || PORT="10086"
@@ -31,29 +24,80 @@ USERNAME=$(uci -q get 1panel.main.username)
 [ -n "$USERNAME" ] || USERNAME="1panel"
 
 ENTRANCE=$(uci -q get 1panel.main.entrance)
-[ -n "$ENTRANCE" ] || ENTRANCE="entrance"
-
-PANELVER=$(uci -q get 1panel.main.ver)
-[ -n "$PANELVER" ] || PANELVER="v1.10.34-lts"
-
-DATADIR=$(uci -q get 1panel.main.datadir)
-[ -n "$DATADIR" ] || DATADIR="/mnt/sda1/Configs/1Panel"
 
 LANIP=$(uci -q get network.lan.ipaddr)
 [ -n "$LANIP" ] || LANIP="192.168.88.1"
 
+RUN_DIR="$DATADIR/1panel"
+
+arch_name() {
+	case "$(uname -m)" in
+		aarch64 | arm64) echo "arm64" ;;
+		x86_64 | amd64) echo "amd64" ;;
+		*) echo "" ;;
+	esac
+}
+
+# 官方 install.sh 和它装出来的 1pctl 都是 #!/bin/bash（install.sh 里有 80
+# 多处 [[ ]]），busybox ash 跑不了。缺 bash 时直接说清楚，别让人对着
+# "not found" 猜。
+need_bash() {
+	command -v bash >/dev/null 2>&1 && return 0
+	echo "缺少 bash：1Panel 的 install.sh 和 1pctl 都是 bash 脚本。" >&2
+	echo "先装：apk add bash" >&2
+	return 1
+}
+
 save_cfg() {
 	uci -q get 1panel.main >/dev/null 2>&1 || uci -q set 1panel.main='1panel'
-	uci -q set "1panel.main.container=$CONTAINER"
-	uci -q set "1panel.main.kind=$KIND"
-	uci -q set "1panel.main.image=$IMAGE"
+	uci -q set "1panel.main.datadir=$DATADIR"
 	uci -q set "1panel.main.port=$PORT"
 	uci -q set "1panel.main.username=$USERNAME"
-	uci -q set "1panel.main.entrance=$ENTRANCE"
-	uci -q set "1panel.main.ver=$PANELVER"
-	uci -q set "1panel.main.datadir=$DATADIR"
-	[ -n "$ENVPASS" ] && uci -q set "1panel.main.password=$ENVPASS"
+	[ -n "$ENTRANCE" ] && uci -q set "1panel.main.entrance=$ENTRANCE"
 	uci -q commit 1panel
+}
+
+# 程序在不在，只看 1pctl：刷机后 overlay 里的二进制会丢，数据却还在 /mnt。
+# 两者分开判断，页面才能在「程序没了但数据还在」时给出重装入口，
+# 而不是误报成"已安装"。
+installed() {
+	[ -x "$BIN_DIR/1pctl" ]
+}
+
+datakept() {
+	[ -f "$RUN_DIR/db/core.db" ]
+}
+
+local_version() {
+	local v
+
+	[ -x "$BIN_DIR/1pctl" ] || return 1
+
+	v=$("$BIN_DIR/1pctl" version 2>/dev/null | sed -n 's/^version: *//p' | head -n1)
+	[ -n "$v" ] || v=$("$BIN_DIR/1panel" version 2>/dev/null | sed -n 's/^version: *//p' | head -n1)
+	[ -n "$v" ] || v=$("$BIN_DIR/1panel" --version 2>/dev/null | head -n1)
+	echo "$v"
+}
+
+core_pid() {
+	local p exe
+
+	for p in /proc/[0-9]*; do
+		[ -r "$p/cmdline" ] || continue
+		exe=$(tr '\0' ' ' <"$p/cmdline" 2>/dev/null)
+		case "$exe" in
+			*/1panel-core*) echo "${p#/proc/}"; return 0 ;;
+		esac
+	done
+	return 1
+}
+
+svc_running() {
+	core_pid >/dev/null 2>&1
+}
+
+port_listening() {
+	netstat -lnt 2>/dev/null | grep -q ":$PORT "
 }
 
 url_of() {
@@ -64,203 +108,426 @@ url_of() {
 	fi
 }
 
-panel_version() {
+# 远端最新版本。返回空表示取不到（离线或被墙），调用方要能容忍。
+remote_version() {
 	local v
 
-	v=$(docker exec "$CONTAINER" 1pctl version 2>/dev/null | sed -n 's/^version: *//p' | head -n1)
-	[ -n "$v" ] || v=$(docker exec "$CONTAINER" 1panel --version 2>/dev/null | head -n1)
-	echo "$v"
+	v=$(curl -fsSL --max-time 12 "$BASE_URL/latest" 2>/dev/null | tr -d ' \r\n')
+	case "$v" in
+		v[0-9]*) echo "$v" ;;
+		*) echo "" ;;
+	esac
+}
+
+cached_remote_version() {
+	[ -s "$TASK_DIR/latest" ] && cat "$TASK_DIR/latest" 2>/dev/null
+}
+
+# 数据目录所在分区与 overlay 的剩余空间，安装前一目了然。
+disk_info() {
+	local d_free o_free
+
+	d_free=$(df -k "$DATADIR" 2>/dev/null | awk 'NR==2 {print $4}')
+	o_free=$(df -k / 2>/dev/null | awk 'NR==2 {print $4}')
+
+	echo "data_free_kb=${d_free:-0}"
+	echo "overlay_free_kb=${o_free:-0}"
+}
+
+task_phase() {
+	[ -s "$TASK_DIR/state" ] && cat "$TASK_DIR/state" 2>/dev/null || echo "idle"
+}
+
+set_phase() {
+	mkdir -p "$TASK_DIR"
+	echo "$1" >"$TASK_DIR/state"
 }
 
 cmd_status() {
-	local state installed running
+	local ver state
 
-	echo "kind=$KIND"
-	echo "container=$CONTAINER"
-	echo "image=$IMAGE"
+	echo "kind=native"
 	echo "port=$PORT"
-	echo "entrance=$ENTRANCE"
 	echo "username=$USERNAME"
+	echo "entrance=$ENTRANCE"
 	echo "datadir=$DATADIR"
+	echo "rundir=$RUN_DIR"
 	echo "address=$(url_of)"
+	echo "arch=$(arch_name)"
+	echo "latest=$(cached_remote_version)"
+	echo "task=$(task_phase)"
 
-	if ! docker inspect "$CONTAINER" >/dev/null 2>&1; then
+	disk_info
+
+	if ! installed; then
 		echo "installed=0"
 		echo "running=0"
+		# 程序没了但数据库还在：上面这些目录信息仍然有效，重装会沿用。
+		echo "datakept=$(datakept && echo 1 || echo 0)"
 		return 0
 	fi
 
-	state=$(docker inspect -f '{{.State.Status}}' "$CONTAINER" 2>/dev/null)
-	installed=1
-	[ "$state" = "running" ] && running=1 || running=0
+	echo "installed=1"
 
-	echo "installed=$installed"
-	echo "running=$running"
-	echo "state=${state:-unknown}"
-	echo "created=$(docker inspect -f '{{.Created}}' "$CONTAINER" 2>/dev/null | cut -c1-10)"
+	if svc_running; then
+		echo "running=1"
+		echo "pid=$(core_pid)"
+	else
+		echo "running=0"
+	fi
 
-	[ "$running" = "1" ] && echo "version=$(panel_version)"
+	echo "listening=$(port_listening && echo 1 || echo 0)"
+
+	ver=$(local_version)
+	echo "version=${ver}"
+
+	# 数据目录实际占用（面板数据库、日志、备份都在这）
+	echo "datasize=$(du -sk "$RUN_DIR" 2>/dev/null | awk '{print $1}')"
 	return 0
 }
 
-# systemd 那一套：容器里要能当 PID 1 跑起来，所以 cgroup 命名空间用宿主机的，
-# 并给 SYS_ADMIN。/var/run 挂到 /var2/run，避免盖掉容器自己的 /var/run。
-run_istore() {
-	local rslave=""
+cmd_latest() {
+	local v
 
-	mkdir -p "$DATADIR" || return 1
-	save_cfg
+	mkdir -p "$TASK_DIR"
 
-	cat >"$DATADIR/env" <<EOF
-export PANEL_BASE_DIR=${DATADIR}
-export PANEL_PORT=${PORT}
-export DEFAULT_ENTRANCE=${ENTRANCE}
-export DEFAULT_USERNAME=${USERNAME}
-export DEFAULT_PASSWORD=${ENVPASS}
-export PANELVER=${PANELVER}
-EOF
+	v=$(remote_version)
+	if [ -n "$v" ]; then
+		echo "$v" >"$TASK_DIR/latest"
+	else
+		v=$(cached_remote_version)
+	fi
 
-	mountpoint -q /mnt && rslave=":rslave"
-
-	docker run --restart=unless-stopped -d \
-		-h 1PanelServer \
-		--cgroupns=host \
-		--cap-add SYS_ADMIN \
-		--tmpfs /tmp \
-		--network host \
-		-v /sys/fs/cgroup:/sys/fs/cgroup \
-		-v /var/run:/var2/run \
-		-v "$DATADIR:/iStorePanel" \
-		-v "/mnt:/mnt$rslave" \
-		-e TZ=Asia/Shanghai \
-		--name "$CONTAINER" \
-		"$IMAGE" || return 1
-
-	echo "容器已启动，systemd 就绪后需要再点一次「初始化」执行 reinstall.sh"
+	echo "latest=$v"
+	echo "current=$(local_version)"
 	return 0
 }
 
-run_moelin() {
-	mkdir -p "$DATADIR" || return 1
-	save_cfg
+# ---------------------------------------------------------------- 后台任务
+# 下载 59MB、解包 169MB、安装要 2-3 分钟，同步执行会把页面拖到超时，所以
+# 一律丢到后台，页面轮询 status 的 task 字段。任务状态放 /var/run（tmpfs），
+# 重启自动消失，正好不需要持久化。
 
-	docker run -d \
-		--name "$CONTAINER" \
-		--restart unless-stopped \
-		--network host \
-		-v /var/run/docker.sock:/var/run/docker.sock \
-		-v "$DATADIR:/opt" \
-		-e TZ=Asia/Shanghai \
-		-e PORT="$PORT" \
-		-e USERNAME="$USERNAME" \
-		-e PASSWORD="$ENVPASS" \
-		-e ENTRANCE="$ENTRANCE" \
-		"$IMAGE" || return 1
+SELF=$(readlink -f "$0" 2>/dev/null)
+[ -n "$SELF" ] || SELF="$0"
 
-	echo "容器已启动，首次初始化约 20-60 秒"
+spawn_task() {
+	local phase="$1"
+	local label="$2"
+	local log="$TASK_DIR/log"
+
+	shift 2
+
+	mkdir -p "$TASK_DIR"
+	: >"$log"
+	set_phase "$phase"
+
+	# 重新执行自己，参数与环境变量走 exec 继承（密码里有引号也不会被 shell
+	# 拆开）。setsid 让它脱离 rpcd 的进程组，父进程退出后继续跑。
+	if command -v setsid >/dev/null 2>&1; then
+		setsid "$SELF" "$@" </dev/null >>"$log" 2>&1 &
+	else
+		("$SELF" "$@" </dev/null >>"$log" 2>&1 &)
+	fi
+
+	echo "已开始：$label"
+	echo "任务在后台执行，完成后刷新本页；日志：$log"
+	return 0
+}
+
+worker_install() {
+	local ver arch url tmp pkg dir
+
+	ver="$1"
+	arch=$(arch_name)
+	tmp="$DATADIR/.setup"
+
+	if [ -z "$arch" ]; then
+		set_phase "error:不支持的架构 $(uname -m)"
+		return 1
+	fi
+
+	rm -rf "$tmp"
+	mkdir -p "$tmp" || {
+		set_phase "error:无法创建临时目录 $tmp"
+		return 1
+	}
+
+	# 临时文件放数据盘：/tmp 是 tmpfs，169MB 解包会吃光内存。
+	url="$BASE_URL/$ver/release/1panel-$ver-linux-$arch.tar.gz"
+
+	echo "== 下载 $url"
+	set_phase "downloading:$ver"
+	if ! curl -fL --retry 2 --connect-timeout 15 -o "$tmp/pkg.tar.gz" "$url"; then
+		set_phase "error:下载失败"
+		rm -rf "$tmp"
+		return 1
+	fi
+
+	echo "== 解包"
+	set_phase "extracting:$ver"
+	mkdir -p "$tmp/x" || { set_phase "error:解包目录创建失败"; return 1; }
+	if ! tar zxf "$tmp/pkg.tar.gz" -C "$tmp/x"; then
+		set_phase "error:解包失败（文件可能不完整）"
+		rm -rf "$tmp"
+		return 1
+	fi
+
+	pkg=$(find "$tmp/x" -maxdepth 2 -name install.sh -type f | head -n1)
+	[ -n "$pkg" ] || {
+		set_phase "error:包里没有 install.sh"
+		rm -rf "$tmp"
+		return 1
+	}
+	dir=$(dirname "$pkg")
+
+	echo "== 安装到 $DATADIR"
+	set_phase "installing:$ver"
+
+	# 参数按有值才传：重装（/mnt 里已有 core.db）时留空的项由 install.sh 的
+	# USE_EXISTING 沿用数据库里的旧值，传空字符串反而会覆盖成空。
+	set -- --non-interactive --lang zh --install-dir "$DATADIR" --install-docker n
+	[ -n "$PORT" ] && set -- "$@" --port "$PORT"
+	[ -n "$ENTRANCE" ] && set -- "$@" --entrance "$ENTRANCE"
+	[ -n "$USERNAME" ] && set -- "$@" --username "$USERNAME"
+	[ -n "$P1_PASS" ] && set -- "$@" --password "$P1_PASS"
+
+	# install.sh 收尾时会校验服务状态，用的是 command -v opkg 判断 OpenWrt；
+	# apk 系的固件没有 opkg，它会误判失败并以 1 退出——但此时文件复制、
+	# procd 注册、服务启动都已经做完了。所以不看退出码，装完自己验。
+	(
+		cd "$dir" || exit 1
+		bash ./install.sh "$@"
+	) || echo "== install.sh 返回非 0（apk 系统上的已知误判），继续自行校验"
+
+	echo "== 等待服务就绪"
+	set_phase "starting:$ver"
+
+	local i=0
+	while [ $i -lt 30 ]; do
+		svc_running && port_listening && break
+		i=$((i + 1))
+		sleep 2
+	done
+
+	rm -rf "$tmp"
+
+	if svc_running; then
+		echo "== 完成：$(local_version)"
+		set_phase "done:$ver"
+		return 0
+	fi
+
+	set_phase "error:服务没有起来，看日志 /var/log/1panel-core.log"
+	return 1
+}
+
+worker_update() {
+	local ver before after
+
+	before=$(local_version)
+	ver=$(remote_version)
+	[ -n "$ver" ] || ver="latest"
+
+	echo "== 升级到 $ver（当前 $before）"
+	set_phase "updating:$ver"
+
+	# 走官方升级：它会先备份数据（BackupBeforeUpgrade）再替换二进制，
+	# 比自己 cp 安全。1pctl update 内部调 1panel update。
+	"$BIN_DIR/1pctl" update </dev/null
+
+	local i=0
+	while [ $i -lt 30 ]; do
+		svc_running && port_listening && break
+		i=$((i + 1))
+		sleep 2
+	done
+
+	if ! svc_running; then
+		set_phase "error:升级后服务没有起来，看下面的日志"
+		return 1
+	fi
+
+	after=$(local_version)
+
+	if [ -n "$ver" ] && [ "$ver" != "latest" ] && [ "$after" != "$ver" ]; then
+		echo "== 版本仍是 $after，官方升级没有生效"
+		set_phase "error:升级未生效（仍是 $after），日志见上方"
+		return 1
+	fi
+
+	echo "== 完成：$after"
+	set_phase "done:$after"
 	return 0
 }
 
 cmd_install() {
-	# 参数：port user pass entrance datadir [kind]
+	# 参数：port user pass entrance datadir
+	local overlay_kb
+
 	[ -n "$1" ] && PORT="$1"
 	[ -n "$2" ] && USERNAME="$2"
 	[ -n "$3" ] && ENVPASS="$3"
 	[ -n "$4" ] && ENTRANCE="$4"
 	[ -n "$5" ] && DATADIR="$5"
-	[ -n "$6" ] && KIND="$6"
+	RUN_DIR="$DATADIR/1panel"
 
-	case "$KIND" in
-		istore) [ -n "$(uci -q get 1panel.main.image)" ] || IMAGE="linkease/istorepanel:latest" ;;
-		moelin) [ -n "$(uci -q get 1panel.main.image)" ] || IMAGE="moelin/1panel:v2" ;;
-		*)
-			echo "未知的 kind：$KIND（只支持 istore / moelin）" >&2
-			return 1
-			;;
-	esac
-
-	# 数据目录必须在 /mnt 下：1Panel 的数据库、应用、备份都写这里，落在 overlay
-	# 上会很快把 flash 写满，而且 sysupgrade 时会被清空。LinkEase 的安装脚本在
-	# 这里直接拒绝非 /mnt 路径，保持一致。
 	case "$DATADIR" in
 		/mnt/*) ;;
 		*)
 			echo "数据目录必须位于 /mnt 下（当前：$DATADIR）" >&2
+			echo "面板的数据库、日志、备份都写这里；放 overlay 会写满 flash，刷机也会丢。" >&2
 			return 2
 			;;
 	esac
 
-	docker inspect "$CONTAINER" >/dev/null 2>&1 && {
-		echo "容器 $CONTAINER 已存在，请先卸载或换名字" >&2
-		return 1
-	}
+	case "$PORT" in
+		'' | *[!0-9]*)
+			echo "端口必须是数字（当前：$PORT）" >&2
+			return 1
+			;;
+	esac
 
-	if [ "$KIND" = "moelin" ]; then
-		run_moelin
+	# 重装时（数据还在、二进制被刷掉）允许留空：install.sh 检测到
+	# db/core.db 会走 USE_EXISTING，沿用数据库里的账号、密码与入口。
+	if datakept; then
+		echo "检测到已有数据：$RUN_DIR/db/core.db"
+		echo "留空的账号 / 密码 / 入口会沿用原来的值。"
 	else
-		run_istore
+		[ -n "$USERNAME" ] || { echo "用户名不能为空" >&2; return 1; }
+		[ ${#ENVPASS} -ge 8 ] || { echo "密码至少 8 位" >&2; return 1; }
+		[ -n "$ENTRANCE" ] || { echo "入口路径不能为空（别用 admin/1panel 这类）" >&2; return 1; }
 	fi
-	return $?
-}
 
-# istore 镜像里的 1Panel 是运行时装的：容器起来后必须执行一次 reinstall.sh。
-# 这一步要从官方源下载几百 MB，耗时不确定，所以丢到后台跑，页面靠轮询
-# status 里的 version 判断装完没有；日志写到 /tmp 方便排查。
-cmd_bootstrap() {
-	local v
+	[ -z "$(arch_name)" ] && { echo "不支持的架构：$(uname -m)" >&2; return 1; }
 
-	docker inspect "$CONTAINER" >/dev/null 2>&1 || {
-		echo "容器不存在" >&2
+	need_bash || return 1
+
+	if installed; then
+		echo "已经安装过（$BIN_DIR/1pctl 存在）。重装请先卸载，或直接点「更新」。" >&2
+		return 1
+	fi
+
+	# 二进制约 152MB 落在 overlay，装之前先看一眼够不够。
+	overlay_kb=$(df -k / 2>/dev/null | awk 'NR==2 {print $4}')
+	if [ -n "$overlay_kb" ] && [ "$overlay_kb" -lt 204800 ]; then
+		echo "overlay 剩余不足 200MB（当前 $((overlay_kb / 1024))MB），装完会很紧张：" >&2
+		echo "两个二进制约 152MB 要写进 /usr/local/bin。" >&2
+		return 3
+	fi
+
+	mkdir -p "$DATADIR" || { echo "无法创建 $DATADIR" >&2; return 1; }
+	save_cfg
+
+	local ver
+	ver=$(remote_version)
+	[ -n "$ver" ] || {
+		echo "取不到最新版本号（网络不通？），稍后再试或手动指定" >&2
 		return 1
 	}
 
-	v=$(panel_version)
-	if [ -n "$v" ]; then
-		echo "1Panel 已经装好了：$v"
-		return 0
-	fi
+	# 密码不落 uci：只通过环境变量传给后台子进程，install.sh 会把它写进
+	# /usr/local/bin/1pctl（官方就是这么存的），之后由面板自己管。
+	export P1_PASS="$ENVPASS"
 
-	[ "$(docker inspect -f '{{.State.Status}}' "$CONTAINER" 2>/dev/null)" = "running" ] || {
-		echo "容器没有运行，先启动容器" >&2
-		return 1
-	}
+	spawn_task "downloading:$ver" "安装 1Panel $ver" _worker_install "$ver"
 
-	setsid sh -c "docker exec $CONTAINER /app/reinstall.sh >/tmp/1panel-bootstrap.log 2>&1" \
-		</dev/null >/dev/null 2>&1 &
-
-	echo "已在后台执行 reinstall.sh（下载几百 MB，视网速几十秒到几分钟）"
-	echo "完成后刷新页面即可看到版本号；日志：/tmp/1panel-bootstrap.log"
 	return 0
 }
 
+cmd_update() {
+	local cur ver
+
+	installed || { echo "还没有安装 1Panel" >&2; return 1; }
+
+	need_bash || return 1
+
+	cur=$(local_version)
+	ver=$(remote_version)
+
+	if [ -n "$ver" ] && [ "$cur" = "$ver" ]; then
+		echo "已经是最新版：$cur"
+		return 0
+	fi
+
+	spawn_task "updating:${ver:-latest}" "升级到 ${ver:-最新版}" _worker_update
+	return 0
+}
+
+cmd_remove() {
+	local purge="$1"
+
+	[ -x "$INIT_DIR/1panel-agent" ] && "$INIT_DIR/1panel-agent" stop >/dev/null 2>&1
+	[ -x "$INIT_DIR/1panel-core" ] && "$INIT_DIR/1panel-core" stop >/dev/null 2>&1
+	[ -x "$INIT_DIR/1panel-agent" ] && "$INIT_DIR/1panel-agent" disable >/dev/null 2>&1
+	[ -x "$INIT_DIR/1panel-core" ] && "$INIT_DIR/1panel-core" disable >/dev/null 2>&1
+
+	rm -f "$INIT_DIR/1panel-core" "$INIT_DIR/1panel-agent"
+	rm -f /etc/rc.d/S95_1panel-core /etc/rc.d/K15_1panel-core \
+		/etc/rc.d/S96_1panel-agent /etc/rc.d/K14_1panel-agent
+
+	rm -f "$BIN_DIR/1panel-core" "$BIN_DIR/1panel-agent" "$BIN_DIR/1pctl"
+	rm -rf "$BIN_DIR/lang"
+	rm -f /usr/bin/1panel /usr/bin/1panel-core /usr/bin/1panel-agent /usr/bin/1pctl
+
+	if [ "$purge" = "purge" ]; then
+		rm -rf "$RUN_DIR"
+		echo "已卸载程序并删除数据：$RUN_DIR"
+	else
+		echo "已卸载程序，数据保留在：$RUN_DIR"
+	fi
+
+	return 0
+}
+
+cmd_logs() {
+	if [ -s "$TASK_DIR/log" ]; then
+		echo "== 任务日志 =="
+		tail -n 40 "$TASK_DIR/log"
+		echo
+	fi
+	echo "== 服务日志 =="
+	logread 2>/dev/null | grep -i "1panel" | tail -n 40
+}
+
 case "$1" in
-status)
-	cmd_status
-	;;
-install)
-	cmd_install "$2" "$3" "$4" "$5" "$6" "$7"
-	;;
-bootstrap)
-	cmd_bootstrap
-	;;
-start | stop | restart)
-	docker inspect "$CONTAINER" >/dev/null 2>&1 || {
-		echo "容器 $CONTAINER 不存在" >&2
+	status)
+		cmd_status
+		;;
+	latest)
+		cmd_latest
+		;;
+	install)
+		cmd_install "$2" "$3" "$4" "$5" "$6"
+		;;
+	update)
+		cmd_update
+		;;
+	start | stop | restart)
+		[ -x "$INIT_DIR/1panel-core" ] || { echo "1Panel 未安装" >&2; exit 1; }
+		"$INIT_DIR/1panel-core" "$1" 2>&1
+		if [ -x "$INIT_DIR/1panel-agent" ]; then
+			"$INIT_DIR/1panel-agent" "$1" 2>&1
+		fi
+		;;
+	remove)
+		cmd_remove "$2"
+		;;
+	logs)
+		cmd_logs
+		;;
+	_worker_install)
+		worker_install "$2"
+		;;
+	_worker_update)
+		worker_update
+		;;
+	*)
+		echo "用法：1panel-ctl status|latest|install <port> <user> <pass> <entrance> <datadir>|update|start|stop|restart|remove [purge]|logs" >&2
 		exit 1
-	}
-	docker "$1" "$CONTAINER" 2>&1
-	;;
-remove)
-	docker stop "$CONTAINER" >/dev/null 2>&1
-	docker rm "$CONTAINER" 2>&1
-	;;
-logs)
-	docker logs --tail 60 "$CONTAINER" 2>&1
-	;;
-*)
-	echo "用法：1panel-ctl status|install <port> <user> <pass> <entrance> <datadir> <kind>|bootstrap|start|stop|restart|remove|logs" >&2
-	exit 1
-	;;
+		;;
 esac
 
-exit 0
+# 各分支的返回值要带出去：install 的 2/3 表示目录不合规、overlay 不足，
+# 页面据此提示，不能被一个固定 exit 0 吞掉。
+exit $?

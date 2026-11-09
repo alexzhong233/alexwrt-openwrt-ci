@@ -1,6 +1,6 @@
 {
 	"luci-app-1panel": {
-		"description": "Inspect and control the 1Panel container",
+		"description": "Install, update and control 1Panel (native, procd-managed)",
 		"read": {
 			"file": {
 				"/usr/libexec/1panel-ctl": [ "exec" ]
