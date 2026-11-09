@@ -148,6 +148,31 @@ cat /proc/net/dev | grep tun             # 隔 10 秒看两次，tun163 的 RX/T
 
 两个容易误判的地方：`nft list tables | grep XU_ACC` 为空是正常的（OEM 构建只建策略路由，不建这些表）；两次 `uu-detect` 的 `cloud=` 地址不同也正常（有多个控制节点，取第一条 ESTABLISHED）。
 
+### UU 加速器与 PassWall 的 DNS 冲突
+
+UU 加速某台设备时，会动两类规则来抢 DNS：
+
+| 层 | UU 插入的规则 | 后果 |
+|---|---|---|
+| IPv4 | `nat PREROUTING` 最前面 `-p udp --dport 53 -j DNAT --to-destination 8.8.8.8` | 设备发往路由器 `192.168.88.1` 的 DNS 被改到 8.8.8.8，而 8.8.8.8 又被 UU 的 `table 179` 指进 `tun163` 游戏隧道 → 查询被丢或拿到 GFW 投毒结果 |
+| IPv6 | `ip6tables filter` 的 INPUT / FORWARD 各一条 `-p udp --dport 53 -m mac --mac-source <MAC> -j DROP` | UU 不支持 IPv6，就把被加速设备的 IPv6 DNS 直接封死 |
+
+**关键差别：UU 停止加速会清掉 `ip rule`、`tun163` 和 nat 规则，但不会清 ip6tables 里那两条 DROP。** 所以「用 UU 加速过一次」之后，这台设备的 IPv6 解析会一直失败到下次重启，而且没有任何提示——浏览器走 DoH 照常能开网页，只有系统解析和命令行工具受影响。
+
+`uu-dns-guard` 每 3 秒做两件事，幂等、只在有变化时写日志：
+
+1. 把「发往路由器自己的 UDP/53」的 `RETURN` 顶到 `nat PREROUTING` 第 1 位（只拦目的地是路由器的查询，不影响 UU 处理其余流量）；
+2. 删掉 `ip6tables filter` 里针对 UDP/53 的 DROP。
+
+```sh
+/etc/init.d/uu-dns-guard enable && /etc/init.d/uu-dns-guard start
+/etc/init.d/uu-dns-guard stop && /etc/init.d/uu-dns-guard disable   # 关闭
+```
+
+默认不启用。与 `netbird-passwall-compat-watch` 互不干扰：那个处理 netbird 的 mark 豁免，这个处理 UU 的 DNS 干扰，触发条件不同，刻意分成两个脚本。
+
+不装这个守护也有办法绕开：把设备的 DNS 收敛到 IPv4 的 `192.168.88.1`（或直接关掉网卡的 IPv6），IPv6 DNS 那条路本来就已经通过 `uci set dhcp.lan.ra_dns='0'` 停止下发了。
+
 ### 升级辅助
 
 | 脚本 | 作用 |
