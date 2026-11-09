@@ -1,0 +1,144 @@
+#!/bin/sh
+# 1Panel 容器的状态查询与生命周期操作。
+#
+# 1Panel 官方不发布 Docker 镜像，也不支持在没有 systemd 的系统上安装（OpenWrt
+# 用 procd）。能在这台机器上跑起来的只有社区镜像，其中 moelin/1panel 同时提供
+# v1/v2、arm64 与国内外两个源，所以这里按它的约定部署：host 网络、挂
+# /var/run/docker.sock、数据落在 -v <datadir>:/opt。
+#
+# 容器名、镜像、端口、入口路径都存在 uci 里，LuCI 页面读同一份配置。
+
+CONTAINER=$(uci -q get 1panel.main.container)
+[ -n "$CONTAINER" ] || CONTAINER="1panel"
+IMAGE=$(uci -q get 1panel.main.image)
+[ -n "$IMAGE" ] || IMAGE="moelin/1panel:v2"
+PORT=$(uci -q get 1panel.main.port)
+[ -n "$PORT" ] || PORT="10086"
+USERNAME=$(uci -q get 1panel.main.username)
+[ -n "$USERNAME" ] || USERNAME="admin"
+ENTRANCE=$(uci -q get 1panel.main.entrance)
+DATADIR=$(uci -q get 1panel.main.datadir)
+[ -n "$DATADIR" ] || DATADIR="/mnt/sda1/Configs/1Panel"
+
+LANIP=$(uci -q get network.lan.ipaddr)
+[ -n "$LANIP" ] || LANIP="192.168.88.1"
+
+save_cfg() {
+	uci -q get 1panel.main >/dev/null 2>&1 || uci -q set 1panel.main='1panel'
+	uci -q set "1panel.main.container=$CONTAINER"
+	uci -q set "1panel.main.image=$IMAGE"
+	uci -q set "1panel.main.port=$PORT"
+	uci -q set "1panel.main.username=$USERNAME"
+	uci -q set "1panel.main.datadir=$DATADIR"
+	[ -n "$ENTRANCE" ] && uci -q set "1panel.main.entrance=$ENTRANCE"
+	uci -q commit 1panel
+}
+
+url_of() {
+	if [ -n "$ENTRANCE" ]; then
+		echo "http://$LANIP:$PORT/$ENTRANCE"
+	else
+		echo "http://$LANIP:$PORT"
+	fi
+}
+
+cmd_status() {
+	local state installed running
+
+	if ! docker inspect "$CONTAINER" >/dev/null 2>&1; then
+		echo "installed=0"
+		echo "running=0"
+		echo "container=$CONTAINER"
+		echo "image=$IMAGE"
+		echo "port=$PORT"
+		echo "entrance=$ENTRANCE"
+		echo "datadir=$DATADIR"
+		echo "address=$(url_of)"
+		return 0
+	fi
+
+	state=$(docker inspect -f '{{.State.Status}}' "$CONTAINER" 2>/dev/null)
+	installed=1
+	[ "$state" = "running" ] && running=1 || running=0
+
+	echo "installed=$installed"
+	echo "running=$running"
+	echo "state=${state:-unknown}"
+	echo "container=$CONTAINER"
+	echo "image=$(docker inspect -f '{{.Config.Image}}' "$CONTAINER" 2>/dev/null)"
+	echo "created=$(docker inspect -f '{{.Created}}' "$CONTAINER" 2>/dev/null | cut -c1-10)"
+	echo "port=$PORT"
+	echo "entrance=$ENTRANCE"
+	echo "datadir=$DATADIR"
+	echo "address=$(url_of)"
+
+	# 1pctl 在 v1/v2 里输出格式不同，只取 version 那一行，取不到就留空。
+	if [ "$running" = "1" ]; then
+		echo "version=$(docker exec "$CONTAINER" 1pctl version 2>/dev/null \
+			| sed -n 's/^version: *//p' | head -n1)"
+	fi
+	return 0
+}
+
+cmd_install() {
+	# 参数：port user pass entrance [datadir]
+	[ -n "$1" ] && PORT="$1"
+	[ -n "$2" ] && USERNAME="$2"
+	[ -n "$4" ] && ENTRANCE="$4"
+	[ -n "$5" ] && DATADIR="$5"
+
+	docker inspect "$CONTAINER" >/dev/null 2>&1 && {
+		echo "容器 $CONTAINER 已存在，先卸载或改名" >&2
+		return 1
+	}
+
+	mkdir -p "$DATADIR" || return 1
+	save_cfg
+
+	docker run -d \
+		--name "$CONTAINER" \
+		--restart unless-stopped \
+		--network host \
+		-v /var/run/docker.sock:/var/run/docker.sock \
+		-v "$DATADIR:/opt" \
+		-e TZ=Asia/Shanghai \
+		-e PORT="$PORT" \
+		-e USERNAME="$USERNAME" \
+		-e PASSWORD="$3" \
+		-e ENTRANCE="$ENTRANCE" \
+		"$IMAGE" || return 1
+
+	echo "已启动容器 $CONTAINER，镜像 $IMAGE"
+	echo "访问：$(url_of)"
+	echo "首次初始化需要 20-60 秒，用 docker logs -f $CONTAINER 查看进度"
+	return 0
+}
+
+case "$1" in
+status)
+	cmd_status
+	;;
+start | stop | restart)
+	docker inspect "$CONTAINER" >/dev/null 2>&1 || {
+		echo "容器 $CONTAINER 不存在" >&2
+		exit 1
+	}
+	docker "$1" "$CONTAINER" 2>&1
+	;;
+install)
+	cmd_install "$2" "$3" "$4" "$5" "$6"
+	;;
+remove)
+	docker stop "$CONTAINER" >/dev/null 2>&1
+	docker rm "$CONTAINER" 2>&1
+	;;
+logs)
+	docker logs --tail 60 "$CONTAINER" 2>&1
+	;;
+*)
+	echo "用法：1panel-ctl status|start|stop|restart|install <port> <user> <pass> <entrance> [datadir]|remove|logs" >&2
+	exit 1
+	;;
+esac
+
+exit 0

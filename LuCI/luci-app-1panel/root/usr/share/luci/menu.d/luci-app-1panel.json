@@ -1,0 +1,13 @@
+{
+	"admin/nas/1panel": {
+		"title": "1Panel",
+		"order": 60,
+		"action": {
+			"type": "view",
+			"path": "1panel/status"
+		},
+		"depends": {
+			"acl": [ "luci-app-1panel" ]
+		}
+	}
+}

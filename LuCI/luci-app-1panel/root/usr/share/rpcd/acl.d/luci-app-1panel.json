@@ -1,0 +1,16 @@
+{
+	"luci-app-1panel": {
+		"description": "Inspect and control the 1Panel container",
+		"read": {
+			"file": {
+				"/usr/libexec/1panel-ctl": [ "exec" ]
+			}
+		},
+		"write": {
+			"file": {
+				"/usr/libexec/1panel-ctl": [ "exec" ]
+			},
+			"uci": [ "1panel" ]
+		}
+	}
+}
