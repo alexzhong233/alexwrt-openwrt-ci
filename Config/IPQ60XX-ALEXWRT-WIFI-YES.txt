@@ -97,6 +97,18 @@ CONFIG_PACKAGE_luci-app-systools=y
 CONFIG_PACKAGE_luci-i18n-systools-zh-cn=y
 CONFIG_PACKAGE_luci-app-ttyd=y
 CONFIG_PACKAGE_luci-app-uugamebooster=y
+# Nikki：mihomo 的 OpenWrt 前端。内核也一起打进去 —— 官方 feeds
+# (immortalwrt/packages) 里没有 mihomo 包，用的是 Nikki 仓库里那份 mihomo-meta
+# （PROVIDES:=mihomo）。keep.d 覆盖 /etc/nikki 的 profiles/subscriptions/mixin，
+# 刷机后订阅和 uci 设置都还在。
+CONFIG_PACKAGE_nikki=y
+CONFIG_PACKAGE_luci-app-nikki=y
+CONFIG_PACKAGE_mihomo-meta=y
+# 订阅转换（alexwrt-subgen）：Go 服务 + LuCI 控制台，把机场订阅转成带 fallback
+# 降级链的完整 mihomo 配置，Nikki 直接订它。固件里装的是配置模板（不含任何
+# 订阅 token / 节点密码），首次进「服务 → 订阅转换」填。监听 0.0.0.0:25500，
+# 只在 LAN 上给浏览器和 Nikki 用。
+CONFIG_PACKAGE_luci-app-subgen=y
 CONFIG_PACKAGE_vlmcsd=y
 CONFIG_PACKAGE_luci-app-vlmcsd=y
 # WorkBuddy2API：只预装四选一的安装页（约 40KB），应用本体不预装 —— 页面上

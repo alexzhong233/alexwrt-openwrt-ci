@@ -170,7 +170,14 @@ UPDATE_PACKAGE "shadcn" "eamonxg/luci-theme-shadcn" "main"
 UPDATE_PACKAGE "vantage" "anothaDev/luci-theme-vantage" "main"
 
 UPDATE_PACKAGE "momo" "nikkinikki-org/OpenWrt-momo" "main"
-UPDATE_PACKAGE "nikki" "nikkinikki-org/OpenWrt-nikki" "main"
+# Nikki + 它的 mihomo 内核。官方 feeds（immortalwrt/packages）里没有 mihomo 包，
+# 而 nikki 的 DEPENDS 写的是 +mihomo —— 只能从 Nikki 自己的仓库取，
+# 那里的 mihomo-meta 声明了 PROVIDES:=mihomo。
+# 不能用 UPDATE_PACKAGE "nikki"：它是按 *nikki* 匹配目录名的，只会拷 nikki 和
+# luci-app-nikki，mihomo-meta 漏掉，然后依赖解析阶段报 unable to select packages。
+UPDATE_NESTED_PACKAGE "nikki" "nikkinikki-org/OpenWrt-nikki" "main" "nikki"
+UPDATE_NESTED_PACKAGE "luci-app-nikki" "nikkinikki-org/OpenWrt-nikki" "main" "luci-app-nikki"
+UPDATE_NESTED_PACKAGE "mihomo-meta" "nikkinikki-org/OpenWrt-nikki" "main" "mihomo-meta"
 # OpenClash 和 PassWall 走官方 feeds（luci feed），不再从作者仓库 clone。
 #
 # 两个来源的内容基本一致，官方 feed 反而更规整：
@@ -246,6 +253,10 @@ UPDATE_TOPLEVEL_PACKAGE "luci-app-1panel" "alexzhong233/luci-app-1panel" "main"
 # Rust 版的 procd 脚本，应用本体由页面按需下载；四套共用一份 accounts/，
 # 所以不预装任何一套，也不依赖 python3（装本地·原版时由上游包自己带）。
 UPDATE_TOPLEVEL_PACKAGE "luci-app-workbuddy2api" "alexzhong233/luci-app-workbuddy2api" "main"
+
+# 订阅转换（alexwrt-subgen）：Go 服务 + LuCI 控制台 + rpcd 插件。
+# 包不在仓库根，而在 luci-app/ 子目录，所以走 NESTED 提取。
+UPDATE_NESTED_PACKAGE "luci-app-subgen" "alexzhong233/alexwrt-subgen" "main" "luci-app"
 # vlmcsd 换回官方 feeds：核心是 Wind4/vlmcsd（pin 在 2020-03-30 e599080，同一个
 # 程序的不同 fork，激活行为不变），页面是官方 JS 单页，配置走 uci
 # /etc/config/vlmcsd，不再是 mchome 版的 /etc/vlmcsd.ini。
