@@ -242,6 +242,10 @@ UPDATE_TOPLEVEL_PACKAGE "luci-app-netbird-tools" "alexzhong233/luci-app-netbird-
 # 1Panel v2 裸机版：安装 / 更新检测 / 状态 / 启停。官方包自带 procd 脚本，
 # 不需要容器；页面和 1panel-ctl 都在这个仓库里。
 UPDATE_TOPLEVEL_PACKAGE "luci-app-1panel" "alexzhong233/luci-app-1panel" "main"
+# WorkBuddy2API 四选一安装页（本地/容器 × 原版/Rust）。包里只有页面、ctl 和
+# Rust 版的 procd 脚本，应用本体由页面按需下载；四套共用一份 accounts/，
+# 所以不预装任何一套，也不依赖 python3（装本地·原版时由上游包自己带）。
+UPDATE_TOPLEVEL_PACKAGE "luci-app-workbuddy2api" "alexzhong233/luci-app-workbuddy2api" "main"
 # vlmcsd 换回官方 feeds：核心是 Wind4/vlmcsd（pin 在 2020-03-30 e599080，同一个
 # 程序的不同 fork，激活行为不变），页面是官方 JS 单页，配置走 uci
 # /etc/config/vlmcsd，不再是 mchome 版的 /etc/vlmcsd.ini。

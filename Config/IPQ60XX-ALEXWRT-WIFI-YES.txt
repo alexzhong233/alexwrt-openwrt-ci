@@ -99,9 +99,10 @@ CONFIG_PACKAGE_luci-app-ttyd=y
 CONFIG_PACKAGE_luci-app-uugamebooster=y
 CONFIG_PACKAGE_vlmcsd=y
 CONFIG_PACKAGE_luci-app-vlmcsd=y
-# WorkBuddy2API 整个不参与构建：界面在 backup/luci-app-workbuddy2api，
-# 包骨架与应用源码的拉取脚本在 backup/prepare-workbuddy2api.sh，
-# 两边都不在构建树里，所以这里连 =m 都没有 —— 留 =m 只会得到一个不存在的符号。
+# WorkBuddy2API：只预装四选一的安装页（约 40KB），应用本体不预装 —— 页面上
+# 按需装本地·原版 / 容器·原版 / 本地·Rust / 容器·Rust，四套共用一份 accounts/。
+# 这样既省下原来预装 python3 那 15.3 MiB，又不用为了换实现重刷。
+CONFIG_PACKAGE_luci-app-workbuddy2api=y
 
 # 覆盖 GENERAL.txt 的通用项：这两个在 GENERAL 里是 =y，雅典娜上只编译不预装，
 # 需要时从软件包管理器装。因为本文件在 GENERAL 之后写入，这里的值生效。
