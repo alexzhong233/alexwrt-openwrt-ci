@@ -20,7 +20,7 @@ SCRIPT_DIR=$(cd "$(dirname "$0")" && pwd)
 REPO_ROOT=$(dirname "$SCRIPT_DIR")
 
 if [ ! -d "$REPO_ROOT/LuCI" ]; then
-	echo "::warning::本地 LuCI 目录不存在，自建页面不会进固件"
+	echo "本地 LuCI 目录不存在，跳过（页面都已独立成仓库，见 Packages.sh）"
 	exit 0
 fi
 

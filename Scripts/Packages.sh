@@ -235,6 +235,13 @@ UPDATE_TOPLEVEL_PACKAGE "luci-app-harbor-file" "destan19/luci-app-harbor-file" "
 # 仓库根目录就是包本身（Makefile 在根上），所以走 TOPLEVEL；换板子只需改页面里的
 # 39000000.nss 设备名。别的固件也能直接用这个仓库。
 UPDATE_TOPLEVEL_PACKAGE "luci-app-nss-status" "alexzhong233/luci-app-nss-status" "main"
+# NetBird × PassWall 共存：规则守护（nft monitor 事件驱动）+ LuCI 状态页。
+# 以前拆成两半——页面在 LuCI/，三个脚本在 Files/ 覆盖层——现在合成一个包，
+# 全部由仓库安装，路径不变（/usr/bin/netbird-*、/etc/init.d/netbird-passwall-compat-watch）。
+UPDATE_TOPLEVEL_PACKAGE "luci-app-netbird-tools" "alexzhong233/luci-app-netbird-tools" "main"
+# 1Panel v2 裸机版：安装 / 更新检测 / 状态 / 启停。官方包自带 procd 脚本，
+# 不需要容器；页面和 1panel-ctl 都在这个仓库里。
+UPDATE_TOPLEVEL_PACKAGE "luci-app-1panel" "alexzhong233/luci-app-1panel" "main"
 # vlmcsd 换回官方 feeds：核心是 Wind4/vlmcsd（pin 在 2020-03-30 e599080，同一个
 # 程序的不同 fork，激活行为不变），页面是官方 JS 单页，配置走 uci
 # /etc/config/vlmcsd，不再是 mchome 版的 /etc/vlmcsd.ini。

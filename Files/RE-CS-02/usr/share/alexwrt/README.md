@@ -27,35 +27,35 @@
 
 ## NetBird 兼容守护
 
-固件只带一个兼容守护：`netbird-passwall-compat-watch`，事件驱动。它用 `nft monitor` 订阅规则变更，NetBird 重建 `netbird-mangle-prerouting` 链后立即补回 PassWall 的 mark 豁免；另有 60 秒兜底全量检查，防止 monitor 丢事件。实际改规则的实现是 `/usr/bin/netbird-passwall-compat.sh`，它只作为前者的执行核心，不再单独注册服务。
+来自独立包 [`luci-app-netbird-tools`](https://github.com/alexzhong233/luci-app-netbird-tools)，
+固件只带这一个兼容守护：`netbird-passwall-compat-watch`，事件驱动。它用 `nft monitor`
+订阅规则变更，NetBird 重建 `netbird-mangle-prerouting` 链后立即补回 PassWall 的 mark
+豁免；另有 60 秒兜底全量检查，防止 netlink 事件丢失。实际改规则的实现是
+`/usr/bin/netbird-passwall-compat.sh`，只作为前者的执行核心，不单独注册服务。
 
-它由 `/etc/config/netbird-passwall-compat` 控制：
-
-```
-config compat 'settings'
-	option mode 'off'        # off（默认）| watch
-	option watchdog '60'     # 兜底检查间隔，0 关闭
-```
-
-uci 路径是 `netbird-passwall-compat.settings.mode`。
-
-默认 `off`，什么都不会跑。切换方式：
+配置在 `/etc/config/netbird-passwall-compat`（uci 路径 `netbird-passwall-compat.settings.mode`），
+默认 `off`，什么都不会跑：
 
 ```sh
 /usr/bin/netbird-compat-ctl mode watch   # 启用事件驱动守护
 /usr/bin/netbird-compat-ctl mode off     # 关掉
-/usr/bin/netbird-compat-ctl watchdog 60  # 兜底间隔
+/usr/bin/netbird-compat-ctl status       # 模式、进程、wt0 规则数、兼容规则数
 ```
 
-LuCI 里对应「服务 → NetBird 工具」，能在同一页看到 wt0 转发规则是否还在、守护进程有没有遗留、当前模式和兼容规则条数，也能手动补一次规则、重建 wt0 转发、看日志。
+LuCI 里对应「VPN → NetBird 工具」，同一页能看 wt0 转发规则是否还在、守护进程有没有
+遗留、当前模式和兼容规则条数，也能手动补一次规则、重建 wt0 转发、看日志。
 
 两点说明：
 
 - 单次检查随时可以手动跑：`/usr/bin/netbird-passwall-compat.sh --once`，不需要开守护。
-- `wt0` 的转发规则是 NetBird 运行时插进 `inet fw4` 的，`/etc/init.d/firewall restart` 会冲掉它们。之后执行 `/etc/init.d/netbird restart` 即可恢复；页面上的「重建 wt0 转发」就是这件事。
+- `wt0` 的转发规则是 NetBird 运行时插进 `inet fw4` 的，`/etc/init.d/firewall restart`
+  会冲掉它们。之后执行 `/etc/init.d/netbird restart` 即可恢复；页面上的「重建 wt0 转发」
+  就是这件事。
+
+原理、事件延迟测量（`--test`）、已知边界见包仓库的 README。
 
 ## 其他脚本
 
-`/usr/bin/` 下的脚本都是手动工具，不会因为刷入固件就自行执行或改动配置，只有明确运行后才会检查或修改。详细命令见同目录的 `scripts-README.md`。
+`/usr/bin/` 下的脚本都是手动工具，不会因为刷入固件就自行执行或改动配置，只有明确运行后才会检查或修改。
 
 早期版本提供的 NetBird DNS 包装器、DNS 冲突修复、LAN 转发修复、诊断脚本和路由器状态导出/还原脚本已从固件移除，源码保留在仓库 `backup/`。

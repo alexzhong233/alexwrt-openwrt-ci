@@ -36,19 +36,20 @@ CONFIG_PACKAGE_luci-app-nss-status=y
 # 固件内置：NetBird、Dockerman、PassWall、OpenClash
 CONFIG_PACKAGE_netbird=y
 CONFIG_PACKAGE_luci-app-netbird=y
-# 自建的 NetBird 工具页：看 wt0 转发规则在不在、兼容守护有没有被误开，
-# 并能直接切 off/watch/poll 模式、补规则、重启 netbird、看日志。
-# 包本体在 LuCI/luci-app-netbird-tools，同样由 prepare-luci-packages.sh 拷入。
+# NetBird 工具页：看 wt0 转发规则在不在、兼容守护有没有被误开，
+# 并能直接切 off/watch 模式、补规则、重启 netbird、看日志。
+# 页面 + 三个脚本来自独立仓库 alexzhong233/luci-app-netbird-tools，
+# 由 Packages.sh 的 UPDATE_TOPLEVEL_PACKAGE 拉进 package/。
 CONFIG_PACKAGE_luci-app-netbird-tools=y
 CONFIG_PACKAGE_luci-i18n-netbird-zh-cn=y
 # luci-app-netbird 把 conntrack 写在 LUCI_EXTRA_DEPENDS 里（只为进包元数据，
 # 故意不触发 SDK 编译）。不在这里显式选上，固件打包阶段 apk 只能找到 local
 # 仓库、找不到 conntrack，直接 "unable to select packages" 中断。
 CONFIG_PACKAGE_conntrack=y
-# 自建的 1Panel 页：裸机安装官方 v2、检测更新、启停重启、看状态、打开面板。
+# 1Panel 页：裸机安装官方 v2、检测更新、启停重启、看状态、打开面板。
 # 1Panel v2 的安装包自带 initscript/1panel-core.procd，官方 install.sh 检测到
-# /etc/rc.common 就用 procd，所以这台机器不需要容器。包本体在
-# LuCI/luci-app-1panel，动作逻辑在 Files/RE-CS-02/usr/libexec/1panel-ctl。
+# /etc/rc.common 就用 procd，所以这台机器不需要容器。页面与 1panel-ctl 都在
+# 独立仓库 alexzhong233/luci-app-1panel。
 CONFIG_PACKAGE_luci-app-1panel=y
 CONFIG_PACKAGE_luci-app-dockerman=y
 CONFIG_PACKAGE_docker=y

@@ -60,7 +60,7 @@ set ${s}.country='${country || 'US'}'
 
 - OpenAppFilter：`appfilter`、`kmod-oaf`、`luci-app-oaf` 和中文翻译，页面在“服务 -> 应用过滤”。
 - 雅典娜 LED、Harbor File、OpenList、qBittorrent、UU 游戏加速、KMS。
-- Docker、Docker Compose、1Panel 页 `luci-app-1panel`（裸机安装官方 v2、检测更新、启停、看状态、打开面板；程序装 overlay，数据放 `/mnt`）、NetBird LuCI、FullConeNAT、RTP2HTTPD、软件包管理器、SysTools。
+- Docker、Docker Compose、1Panel 页 [`luci-app-1panel`](https://github.com/alexzhong233/luci-app-1panel)（裸机安装官方 v2、检测更新、启停、看状态、打开面板；程序装 overlay，数据放 `/mnt`）、NetBird LuCI、FullConeNAT、RTP2HTTPD、软件包管理器、SysTools。
 - NSS：`nss-firmware`、`kmod-nss-wifi-drv`、`ATH11K_NSS_WIFI` 与 ath11k/mac80211 NSS 补丁都来自上游源码；自建状态页 `luci-app-nss-status` 在“状态 -> NSS 卸载”，直接读 `nss-wifi-drv` 的 debugfs 显示加速状态、各 vdev 收发计数和流表，不含驱动，不负责开启 NSS。
 - 默认进 rootfs：NetBird、PassWall、OpenClash、Dockerman。HomeProxy 和 PassWall2 只编译为可安装模块。
 - 不进固件：ZeroTier、易有云文件管理器。WorkBuddy2API 已整个移出构建，界面和拉取脚本都留在 `backup/`。
@@ -114,7 +114,7 @@ curl -L -o /usr/share/v2ray/geosite.dat \
 
 ## 脚本
 
-固件里的脚本都在 `/usr/bin/`，默认不启动。NetBird 兼容守护由 `/etc/config/netbird-passwall-compat` 的 `mode` 显式开关（默认 `off`），其他脚本只在明确执行命令后才检查或修改配置。
+NetBird 兼容守护来自独立仓库 [`luci-app-netbird-tools`](https://github.com/alexzhong233/luci-app-netbird-tools)（页面 + 三个脚本打包在一起，不再由固件 files 覆盖层提供），由 `/etc/config/netbird-passwall-compat` 的 `mode` 显式开关（默认 `off`）；其他脚本只在明确执行命令后才检查或修改配置。
 
 ### NetBird 兼容守护
 
@@ -129,7 +129,7 @@ curl -L -o /usr/share/v2ray/geosite.dat \
 /usr/bin/netbird-compat-ctl watchdog 60   # 兜底间隔，0 关闭
 ```
 
-LuCI 里是「服务 → NetBird 工具」，能看状态、切模式、立即补一次规则、重建 wt0 转发、查日志。
+LuCI 里是「VPN → NetBird 工具」，能看状态、切模式、立即补一次规则、重建 wt0 转发、查日志。
 
 `wt0` 的两条转发规则由 NetBird 运行时插进 `inet fw4`，执行 `/etc/init.d/firewall restart` 会被冲掉，之后 `/etc/init.d/netbird restart` 即可恢复。
 
