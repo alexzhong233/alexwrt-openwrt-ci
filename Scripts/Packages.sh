@@ -242,6 +242,19 @@ UPDATE_TOPLEVEL_PACKAGE "luci-app-harbor-file" "destan19/luci-app-harbor-file" "
 # 仓库根目录就是包本身（Makefile 在根上），所以走 TOPLEVEL；换板子只需改页面里的
 # 39000000.nss 设备名。别的固件也能直接用这个仓库。
 UPDATE_TOPLEVEL_PACKAGE "luci-app-nss-status" "alexzhong233/luci-app-nss-status" "main"
+# NSS 状态页 + ECM 控制页，给「qca-nss-drv + qca-nss-ecm」那套上游用（目前是
+# LibWrt/25.12-nss 那条试编线，见 .github/workflows/LIBWRT.yml）。
+#
+# 两套 NSS 实现的 debugfs 完全不同，页面不能混用：
+#   nss-wifi-drv（VIKINGYFY/owrt）  /sys/kernel/debug/39000000.nss/
+#                                   → 上面那个自建页面
+#   qca-nss-drv + ecm（LibWrt）     /sys/kernel/debug/qca-nss-drv/stats/、/ecm/
+#                                   → 这两个包
+# 两边都装也不会互相干扰，各自读自己的目录，读不到就自己隐藏/显示空。
+#
+# 只在选中的 Config 里写 CONFIG_PACKAGE_* 才会进固件，这里 clone 不影响主线。
+UPDATE_TOPLEVEL_PACKAGE "luci-app-nss" "yduke/luci-app-nss" "master"
+UPDATE_TOPLEVEL_PACKAGE "luci-app-nssecm" "Arthur97172/luci-app-nssecm" "main"
 # NetBird × PassWall 共存：规则守护（nft monitor 事件驱动）+ LuCI 状态页。
 # 以前拆成两半——页面在 LuCI/，三个脚本在 Files/ 覆盖层——现在合成一个包，
 # 全部由仓库安装，路径不变（/usr/bin/netbird-*、/etc/init.d/netbird-passwall-compat-watch）。

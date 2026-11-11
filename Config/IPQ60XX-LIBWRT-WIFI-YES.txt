@@ -45,6 +45,13 @@ CONFIG_PACKAGE_kmod-qca-nss-ecm=y
 # 状态页照装：包本身编得出来，只是读不到 nss-wifi-drv 的 debugfs。
 # 留着正好用来确认「换了上游之后页面确实拿不到数」，别让它默默消失。
 CONFIG_PACKAGE_luci-app-nss-status=y
+# 这边真正的状态页：yduke/luci-app-nss 读 /sys/kernel/debug/qca-nss-drv/stats
+# 和 /sys/kernel/debug/ecm/，显示 NSS 核心负载、各模块收发计数、ECM 加速流数，
+# 并在「状态 → 概览」插一个 NSS 区块。JS 版 LuCI，只依赖 luci-base。
+# 配套 luci-app-nssecm 是 ECM 的配置表单（acceleration_engine 可选
+# auto / nss / sfe / ppe / nss-sfe），改完重启 /etc/init.d/qca-nss-ecm。
+CONFIG_PACKAGE_luci-app-nss=y
+CONFIG_PACKAGE_luci-app-nssecm=y
 
 # 固件内置：NetBird、Dockerman、PassWall、OpenClash
 CONFIG_PACKAGE_netbird=y
