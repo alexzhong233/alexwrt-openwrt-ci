@@ -178,19 +178,25 @@ UPDATE_PACKAGE "momo" "nikkinikki-org/OpenWrt-momo" "main"
 UPDATE_NESTED_PACKAGE "nikki" "nikkinikki-org/OpenWrt-nikki" "main" "nikki"
 UPDATE_NESTED_PACKAGE "luci-app-nikki" "nikkinikki-org/OpenWrt-nikki" "main" "luci-app-nikki"
 UPDATE_NESTED_PACKAGE "mihomo-meta" "nikkinikki-org/OpenWrt-nikki" "main" "mihomo-meta"
-# OpenClash 和 PassWall 走官方 feeds（luci feed），不再从作者仓库 clone。
+# OpenClash 改回作者仓库 dev 分支。
 #
-# 两个来源的内容基本一致，官方 feed 反而更规整：
-#   · OpenClash：vernesong 最后一次提交 v0.48.002（2026-10-11），immortalwrt/luci
-#     在 2026-10-20 同步了同一版本。忽略 CRLF 后两者只差 6 个文件，其中 Makefile
-#     那处是官方版修好了 vernesong 版的三处 $ 转义错误（`$(pidof clash)` 少一个 $，
-#     在 recipe 里会被 make 展开成空串，postinst 的 stop 判断实际失效）。
+# 之前用官方 feeds 的稳定版（vernesong v0.48.002），理由是 Makefile 的 $ 转义
+# 更规范。现在改用 dev：dev 分支跟进 QSDK/mihomo 新特性更快，且能在
+# 「内核 → 版本」里直接拉 MetaCubeX 的 dev 版内核。
+# 代价是 dev 不保证向后兼容，上游改了配置结构时行为可能变，升级前留意 release note。
+#
+# 仓库根目录不是包本身（根下有 luci-app-openclash/ 子目录），所以用 pkg 模式提取。
+# 走 clone 后 feeds 里不能再有同名包，Verify 的 FEED_PKG 检查列表里已同步移除。
+UPDATE_PACKAGE "luci-app-openclash" "vernesong/OpenClash" "dev" "pkg"
+#
+# PassWall 仍走官方 feeds（luci feed）。
+#
 #   · PassWall：官方 feed 是 26.11.3，上游 main 只是多几天的小修。差别在打包方式：
 #     官方版把透明代理固定成 nftables（去掉 Iptables/Nftables 开关）、去掉
 #     SSR-libev 客户端、用 geoview 替代 v2ray-geoip/geosite 两个大包。代价是
 #     官方版 DEPENDS 里没有 dnsmasq-full，必须由 Config 显式安装（见 GENERAL.txt）。
 #
-# 少 clone 两个仓库，也少一份"上游改结构、脚本静默失效"的风险。
+# PassWall 少 clone 一个仓库，也少一份"上游改结构、脚本静默失效"的风险。
 UPDATE_PACKAGE "passwall2" "Openwrt-Passwall/openwrt-passwall2" "main" "pkg"
 # Dockerman 保持 lisaac 0.5.26（Lua + CBI + luci-lib-docker），不换官方 feeds 版。
 #
@@ -441,14 +447,16 @@ UPDATE_PACKAGE "mt5700m" "LianXia233/luci-app-mt5700m" "main"
 UPDATE_PACKAGE "netmonitor" "LianXia233/luci-app-netmonitor" "main"
 UPDATE_PACKAGE "qmodem-generic" "LianXia233/luci-app-qmodem-generic" "main"
 
-# 改用官方 feeds 的包（openclash / passwall / diskman / qbittorrent /
+# 改用官方 feeds 的包（passwall / diskman / qbittorrent /
 # vlmcsd / sing-box）。
 #
 # 它们不在上面的自建包清单里，所以 WRT-CORE 的 "Verify Package Selection" 只会
 # 报 warning 而不会失败；feeds update/install 出问题时，make defconfig 会静默
 # 丢掉对应的 CONFIG_PACKAGE_* 行，最后产出一个"构建成功但少了代理页/网盘页"的
 # 固件。这里显式检查一次，缺了就中断。
-for FEED_PKG in luci-app-openclash luci-app-passwall \
+# 注意：luci-app-openclash 已改成从作者仓库 dev 分支 clone，不在 feeds 里，
+# 所以从下面的清单中移除，否则这里会误判成 feeds 失败而中断整个构建。
+for FEED_PKG in luci-app-passwall \
 	luci-app-diskman luci-app-qbittorrent qbittorrent \
 	vlmcsd luci-app-vlmcsd sing-box; do
 	FOUND=""
@@ -460,7 +468,7 @@ for FEED_PKG in luci-app-openclash luci-app-passwall \
 		exit 1
 	fi
 done
-echo "feeds packages present: openclash / passwall / diskman / qbittorrent / vlmcsd / sing-box"
+echo "feeds packages present: passwall / diskman / qbittorrent / vlmcsd / sing-box"
 
 #引入私有扩展脚本
 if [ -f "$GITHUB_WORKSPACE/Scripts/PRIVATE.sh" ]; then

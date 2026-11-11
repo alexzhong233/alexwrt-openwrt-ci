@@ -500,6 +500,24 @@ jobs:
 
             find ./bin/targets/ -type f -exec mv -f {} ./upload/ \;
 
+            # =m 的包（OpenClash、订阅转换 subgen）不进固件，编译产物在
+            # ./bin/packages/<arch>/<feed>/ 下。不一起发布的话，刷完固件在
+            # 软件源里搜不到它们，"编成 =m 供安装"就等于没做。
+            # apk 是 25.12 之后的格式、ipk 是旧格式，两种都收（取决于上游）。
+            mkdir -p ./upload/packages
+            find ./bin/packages/ -type f \( -name "*.apk" -o -name "*.ipk" \) \
+              -exec cp -f {} ./upload/packages/ \; 2>/dev/null || true
+            echo "::notice::=m 包产物 $(ls -1 ./upload/packages/ 2>/dev/null | wc -l) 个，已放入 upload/packages/"
+
+            # 这三个是显式要求编成 =m 的。它们编不出来时固件本身仍然可用，
+            # 所以只 warn 不中断；但必须在日志里喊出来，否则用户刷完固件在
+            # 软件源里找不到包，会以为是固件的问题。
+            for MUST in luci-app-openclash luci-app-subgen ruby; do
+              if ! ls ./upload/packages/ 2>/dev/null | grep -q "^${MUST}[_-]"; then
+                echo "::warning::=m 包 $MUST 没有产物（软件源里装不到），检查它的源码是否拉取成功"
+              fi
+            done
+
             # 上游的 sha256sums 已在上面删掉（里面的文件名都对不上改名后的
             # 固件），这里按最终文件名重新生成一份，刷机前可以校验完整性。
             ( cd ./upload &&
@@ -544,7 +562,11 @@ jobs:
           target_commitish: ${{ github.sha }}
           prerelease: ${{inputs.WRT_TEST}}
           # 用 * 而不是 *.*：SHA256SUMS 这类没有扩展名的文件也要一起发布。
-          files: ./wrt/upload/*
+          # 第二行是 =m 的包产物（OpenClash、subgen 的 apk），必须一起发，
+          # 否则刷完固件在软件源里装不到它们。
+          files: |
+            ./wrt/upload/*
+            ./wrt/upload/packages/*
           body: |
             这是个平台固件包，内含多个设备！
             请注意选择你需要的设备固件！

@@ -88,7 +88,8 @@ CONFIG_PACKAGE_kmod-qca-nss-drv-pppoe=y
 #   docker 的 veth 是纯软件设备，NSS 不认识；uu 和代理靠 tproxy + mark 打标，
 #   ECM 见到标记就主动跳过。它们只会占用 conntrack，不会占用 NSS 连接表。
 
-# 固件内置：NetBird、Dockerman、PassWall、OpenClash
+# 固件内置：NetBird、Dockerman、PassWall
+# 编译但不入固件（=m）：OpenClash、订阅转换 subgen
 CONFIG_PACKAGE_netbird=y
 CONFIG_PACKAGE_luci-app-netbird=y
 CONFIG_PACKAGE_luci-app-netbird-tools=y
@@ -100,7 +101,19 @@ CONFIG_PACKAGE_docker=y
 CONFIG_PACKAGE_dockerd=y
 CONFIG_PACKAGE_docker-compose=y
 CONFIG_PACKAGE_luci-app-passwall=y
-CONFIG_PACKAGE_luci-app-openclash=y
+# OpenClash 打包成 =m（不入固件，编译出 ipk 供软件源安装）。
+# 来源同时改成 vernesong/OpenClash 的 dev 分支（见 Scripts/Packages.sh），
+# 不再用官方 feeds 的稳定版。
+CONFIG_PACKAGE_luci-app-openclash=m
+# OpenClash 的运行时依赖。它已改成 =m（不入固件），但这些依赖不会跟着
+# 进固件 —— 用户在软件源里 apk add luci-app-openclash 时，apk 会去找
+# ruby / ruby-yaml / unzip，固件和软件源里都没有就装不上。
+# 所以这些也编成 =m，跟 openclash 一起发布到 release。
+# （dnsmasq-full / curl / ip-full / kmod-tun 已经是 =y，不用重复）
+CONFIG_PACKAGE_ruby=m
+CONFIG_PACKAGE_ruby-yaml=m
+CONFIG_PACKAGE_unzip=m
+CONFIG_PACKAGE_ca-bundle=m
 CONFIG_PACKAGE_luci-app-netwizard=y
 CONFIG_PACKAGE_luci-i18n-netwizard-zh-cn=y
 CONFIG_PACKAGE_luci-app-vantage=y
@@ -133,7 +146,7 @@ CONFIG_PACKAGE_luci-app-uugamebooster=y
 CONFIG_PACKAGE_nikki=y
 CONFIG_PACKAGE_luci-app-nikki=y
 CONFIG_PACKAGE_mihomo-meta=y
-CONFIG_PACKAGE_luci-app-subgen=y
+CONFIG_PACKAGE_luci-app-subgen=m
 CONFIG_PACKAGE_vlmcsd=y
 CONFIG_PACKAGE_luci-app-vlmcsd=y
 CONFIG_PACKAGE_luci-app-workbuddy2api=y
