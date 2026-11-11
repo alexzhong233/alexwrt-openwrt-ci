@@ -296,3 +296,48 @@ if [ -f "$ATHENA_IMAGE_MK" ]; then
 	fi
 fi
 
+
+#放行 git 源的 PKG_MIRROR_HASH（目前只有 firewall4）
+#
+#firewall4 是 git 源：tarball 由 `git clone --filter=blob:none` + `git archive`
+#+ 把 .git 塞进 tar 现场生成，而 .git 的内容（pack 布局、refs）随 git 版本而变。
+#上游每次 bump 版本时会顺手写一个在该环境算出来的 PKG_MIRROR_HASH，我们这种
+#"手上没有现成 tarball、只能现场重打包"的构建机算出来必然对不上：
+#
+#	Hash of the local file firewall4-2026.11.08~3722eadc.tar.zst does not match
+#	  (file: a95c6cfe..., requested: 70cbaec5...)
+#	    ERROR: package/network/config/firewall4 failed to build.
+#
+#上游自己的构建机 dl/ 里早有那个文件，永远走不到重打包这条路径，所以这个问题
+#他们通常不会遇到。sources.openwrt.org 上也没有对应文件（404），download.pl
+#拿不到镜像版，只能 clone。
+#
+#PKG_SOURCE_VERSION 是完整 SHA，checkout 出来的源码仍然是确定的，所以这里放行
+#（download.mk 生成的脚本本身就认 "skip"）。第一次构建会把生成好的 tarball 落进
+#dl/，被 dl 缓存收走，之后就不用再重打包了。
+ALLOW_MIRROR_HASH() {
+	local NAME=$1 MK=""
+	# firewall4 在 package/network/config/ 下面，不在 package/ 顶层，
+	# 所以先按「相对 package/ 的路径」试，再退回按包名在 feeds 里找。
+	if [ -f "$PACKAGE_PATH/$NAME/Makefile" ]; then
+		MK="$PACKAGE_PATH/$NAME/Makefile"
+	else
+		MK="$(PKG_DIR "$NAME")/Makefile"
+	fi
+	if [ ! -f "$MK" ]; then
+		echo "mirror-hash: $NAME 未找到，跳过"
+		return 0
+	fi
+	if ! grep -q '^PKG_MIRROR_HASH:=' "$MK"; then
+		echo "mirror-hash: $NAME 没有 PKG_MIRROR_HASH，跳过"
+		return 0
+	fi
+	if grep -q '^PKG_MIRROR_HASH:=skip$' "$MK"; then
+		echo "mirror-hash: $NAME 已是 skip"
+		return 0
+	fi
+	sed -i 's/^PKG_MIRROR_HASH:=.*/PKG_MIRROR_HASH:=skip/' "$MK"
+	echo "mirror-hash: $NAME -> skip（源码仍由 PKG_SOURCE_VERSION 的完整 SHA 固定）"
+}
+
+ALLOW_MIRROR_HASH "network/config/firewall4"
