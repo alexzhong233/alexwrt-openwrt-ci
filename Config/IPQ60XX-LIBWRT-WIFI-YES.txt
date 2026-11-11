@@ -53,6 +53,41 @@ CONFIG_PACKAGE_luci-app-nss-status=y
 CONFIG_PACKAGE_luci-app-nss=y
 CONFIG_PACKAGE_luci-app-nssecm=y
 
+# ── 数据面扩容：只补「真能吃到卸载」的三块 ────────────────────────────
+# 判断依据是 qca-nss-drv/Config.in：所有 NSS_DRV_*_ENABLE 默认都是 n，只有
+# 被 select 或显式写 y 才编进 drv。而 clients 里每个 .ko 的 DEPENDS 都写着
+# +@NSS_DRV_XXX_ENABLE —— 两层开关，少一层模块直接不可见，写了也会被丢掉。
+#
+# 桥接（BRIDGE）：LAN 内互访（WiFi↔有线、有线↔有线、NAS↔PC）是 L2 转发，
+#   既不经过代理也不出 WAN，是这台机器上唯一「开了就真省 CPU」的流量。
+CONFIG_NSS_DRV_BRIDGE_ENABLE=y
+CONFIG_PACKAGE_kmod-qca-nss-drv-bridge-mgr=y
+# VLAN：802.1q 子接口。bridge-mgr 的 DEPENDS 会自动带 vlan-mgr，显式写出来
+#   是为了 .config 里一眼能核对。
+CONFIG_NSS_DRV_VLAN_ENABLE=y
+CONFIG_PACKAGE_kmod-qca-nss-drv-vlan-mgr=y
+# PPPoE：家宽拨号时 WAN 侧所有流量都挂在 ppp 接口上。drv 侧的
+#   NSS_DRV_PPPOE_ENABLE 只有 kmod-pppoe 被选中时才会被 ecm 的 DEPENDS 带起来，
+#   而 clients 的 qca-nss-pppoe.ko 没有任何包会自动选 —— 缺它 ECM 就没有
+#   PPPoE accel engine，只能加速 LAN 内的 L3 流，等于白开。三行都写死。
+CONFIG_PACKAGE_kmod-pppoe=y
+CONFIG_NSS_DRV_PPPOE_ENABLE=y
+CONFIG_PACKAGE_kmod-qca-nss-drv-pppoe=y
+#
+# 以下刻意不补，开了也是白占内存：
+#   · IPSEC / TLS / DTLS / QVPN —— 只对「路由器自己终结」的连接有效。
+#     客户端↔外网的 HTTPS 是端到端加密，NSS 看不到明文；VPN 同理。
+#     真正跑在隧道里的是 netbird(WireGuard)，NSS 根本没有 WireGuard accel，
+#     而 IPSEC 那套是给 strongSwan 用的，和 wt0 无关。
+#   · L2TP / PPTP / GRE / VXLAN / MAP-T / TUN6RD / TUNIPIP6 —— 没有任何一条在用。
+#   · SHAPER / IGS —— 没做 SQM 限速，也不看 IPTV 组播。
+#   · LAG —— 没做链路聚合。
+#   · WIFI_MESH —— 走的是 AP 不是 802.11s。
+#
+# docker / uu / nikki / passwall 这四类本来就不可能卸载，别指望：
+#   docker 的 veth 是纯软件设备，NSS 不认识；uu 和代理靠 tproxy + mark 打标，
+#   ECM 见到标记就主动跳过。它们只会占用 conntrack，不会占用 NSS 连接表。
+
 # 固件内置：NetBird、Dockerman、PassWall、OpenClash
 CONFIG_PACKAGE_netbird=y
 CONFIG_PACKAGE_luci-app-netbird=y
