@@ -1,0 +1,54 @@
+# SPDX-License-Identifier: MIT
+# Copyright (C) 2026 alexwrt
+
+name: LIBWRT
+
+# 试编用：把同一套 Config / Scripts 放到另一个上游基线上跑一版，用来对比
+#   · LiBwrt/LibWrt@25.12-nss —— ImmortalWrt 25.12 基线 + qosmio 系 qca-nss-drv/ecm
+#
+# 只保留手动触发，故意不加 schedule：
+#   · 日常刷的是 ALEXWRT.yml 那条线，这条编不编得出都不影响；
+#   · 两套缓存各自 2~3 GB，仓库上限 10 GB，同时按天跑会互相挤掉对方的缓存。
+on:
+  workflow_dispatch:
+    inputs:
+      PACKAGE:
+        description: '额外插件配置，每行一个 CONFIG_PACKAGE_*，可选。'
+        required: false
+        type: string
+      TEST:
+        description: '仅生成配置，不编译固件。'
+        default: false
+        required: false
+        type: boolean
+
+permissions: write-all
+
+jobs:
+  build:
+    name: jdcloud_re-cs-02
+    uses: ./.github/workflows/WRT-CORE.yml
+    with:
+      # Config 文件名不同是必要的：release tag 是 <Config>-<owner>-<branch>-<date>，
+      # 同名的话两条线会往同一个 tag 里塞 assets。
+      WRT_CONFIG: IPQ60XX-LIBWRT-WIFI-YES
+      WRT_THEME: aurora
+      WRT_NAME: alexWrt
+      WRT_IP: 192.168.88.1
+      WRT_PW: 不设置，首次登录后自行设置
+      # LibWrt：ImmortalWrt 25.12 基线，内核 6.12，带版本 tag（v25.12.x）。
+      # NSS 走 nss_packages feed（qca-nss-drv + qca-nss-ecm），
+      # 无线卸载靠 package/kernel/mac80211/patches/nss 的 ath11k 补丁 +
+      # ath.mk 里的 nss_offload=1 frame_mode=2。
+      #
+      # 跟 VIKINGYFY/owrt 的差别：
+      #   · 那边是自研 nss-wifi-drv + wifili，debugfs 在 39000000.nss；
+      #   · 这边 debugfs 在 qca-nss-drv / ecm 下，luci-app-nss-status 读不到，
+      #     页面会显示「未就绪」—— 这不代表 NSS 没工作。
+      WRT_REPO: https://github.com/LiBwrt/LibWrt.git
+      WRT_BRANCH: 25.12-nss
+      WRT_SOURCE: LiBwrt/LibWrt
+      WRT_PACKAGE: ${{inputs.PACKAGE}}
+      WRT_TEST: ${{inputs.TEST || false}}
+      WRT_FILES: RE-CS-02
+      WRT_APPFILTER: true

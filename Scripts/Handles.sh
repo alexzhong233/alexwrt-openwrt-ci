@@ -81,6 +81,7 @@ if [ -f "$WIFI_UC" ]; then
 	echo " "
 	if python3 - "$WIFI_UC" <<'PY'
 import io
+import re
 import sys
 
 path = sys.argv[1]
@@ -114,17 +115,24 @@ inject = (
 )
 src = src.replace(anchor, anchor + inject, 1)
 
-old = "set ${si}.ssid='${defaults?.ssid || 'OWRT'}'"
-new = "set ${si}.ssid='${defaults?.ssid || 'alexwrt-jdcloud-' + band_suffix}'"
-if old not in src:
+# 兜底值不能按字面串匹配：各家上游这两行写法不一样。
+#   · 引号：VIKINGYFY 写 'OWRT'（单引号），LibWrt 写 "LibWrt"（双引号）；
+#   · 默认值：VIKINGYFY 是 OWRT，LibWrt 直接换成自己的名字。
+# 所以按「标识符 + 引号 + 任意值」匹配，替换时沿用原来的引号字符，
+# 这样换上游不用改脚本，也不会因为一个引号让整个构建挂掉。
+pat = re.compile(r"(\$\{defaults\?\.ssid \|\| )(['\"])([^'\"]*)\2")
+if not pat.search(src):
     sys.exit("mac80211.uc: ssid fallback not found")
-src = src.replace(old, new, 1)
 
-old = "set ${s}.country='${country || 'CN'}'"
-new = "set ${s}.country='${country || 'US'}'"
-if old not in src:
+src = pat.sub(
+    lambda m: m.group(1) + m.group(2) + "alexwrt-jdcloud-" + m.group(2) + " + band_suffix",
+    src, count=1)
+
+pat = re.compile(r"(\$\{country \|\| )(['\"])([^'\"]*)\2")
+if not pat.search(src):
     sys.exit("mac80211.uc: country fallback not found")
-src = src.replace(old, new, 1)
+
+src = pat.sub(lambda m: m.group(1) + m.group(2) + "US" + m.group(2), src, count=1)
 
 io.open(path, "w", encoding="utf-8", newline="\n").write(src)
 PY

@@ -1,0 +1,101 @@
+# 京东云雅典娜 RE-CS-02 —— LibWrt 25.12-nss 试编版
+#
+# 与 IPQ60XX-ALEXWRT-WIFI-YES.txt 的唯一差别是 NSS 相关项：两个上游的
+# NSS 实现完全不同，包名和 Kconfig 符号都不一样，不能混用。
+#
+#   VIKINGYFY/immortalwrt@owrt   nss-wifi-drv（自研驱动 + wifili 用户态）
+#                                CONFIG_ATH11K_NSS_WIFI
+#                                debugfs: /sys/kernel/debug/39000000.nss/
+#
+#   LiBwrt/LibWrt@25.12-nss      qosmio 那套 qca-nss-drv + qca-nss-ecm
+#                                （feed: nss_packages，分支 NSS-LibWrt）
+#                                CONFIG_ATH11K_NSS_SUPPORT
+#                                ath.mk 里 MODPARAMS.ath11k:=nss_offload=1 frame_mode=2
+#                                debugfs: /sys/kernel/debug/qca-nss-drv/、/ecm/
+#
+# 两边都是真正的 WiFi 卸载（LibWrt 那套靠 package/kernel/mac80211/patches/nss
+# 的 ath11k 补丁 + nss-drv 的 wifili 转发），不是「只卸有线」。
+#
+# 注意：本文件只用于试编对比。luci-app-nss-status 读的是 nss-wifi-drv 的
+# debugfs 布局，在 LibWrt 上会显示「未就绪」—— 那是预期行为，不代表 NSS 没工作，
+# 要确认得看 /sys/kernel/debug/qca-nss-drv/。
+CONFIG_TARGET_qualcommax=y
+CONFIG_TARGET_qualcommax_ipq60xx=y
+CONFIG_TARGET_DEVICE_qualcommax_ipq60xx_DEVICE_jdcloud_re-cs-02=y
+
+# 应用过滤：LuCI、用户态守护进程、OAF 内核模块和中文翻译
+CONFIG_PACKAGE_appfilter=y
+CONFIG_PACKAGE_kmod-oaf=y
+CONFIG_PACKAGE_luci-app-oaf=y
+CONFIG_PACKAGE_luci-i18n-oaf-zh-cn=y
+
+# NSS：qca-nss-drv + qca-nss-ecm。
+#   · ATH11K_NSS_SUPPORT 打开后，ath.mk 会自动带上 kmod-qca-nss-drv 依赖、
+#     把 ath11k 的模块参数设成 nss_offload=1 frame_mode=2，并 select
+#     PACKAGE_kmod-qca-nss-ecm —— 所以理论上只写这一行就够，下面几个显式写出
+#     来是为了让「到底选中了什么」在 .config 里一眼可见，也防止上游改了
+#     Kconfig 结构后悄悄少装东西。
+#   · nss-firmware 是 meta 包，按 target 自动依赖 nss-firmware-ipq60xx。
+#     固件版本跟随上游默认（11_4，支持 802.11s mesh）；要 12.5 就加
+#     CONFIG_NSS_FIRMWARE_VERSION_12_5=y。
+CONFIG_ATH11K_NSS_SUPPORT=y
+CONFIG_PACKAGE_nss-firmware=y
+CONFIG_PACKAGE_kmod-qca-nss-drv=y
+CONFIG_PACKAGE_kmod-qca-nss-ecm=y
+# 状态页照装：包本身编得出来，只是读不到 nss-wifi-drv 的 debugfs。
+# 留着正好用来确认「换了上游之后页面确实拿不到数」，别让它默默消失。
+CONFIG_PACKAGE_luci-app-nss-status=y
+
+# 固件内置：NetBird、Dockerman、PassWall、OpenClash
+CONFIG_PACKAGE_netbird=y
+CONFIG_PACKAGE_luci-app-netbird=y
+CONFIG_PACKAGE_luci-app-netbird-tools=y
+CONFIG_PACKAGE_luci-i18n-netbird-zh-cn=y
+CONFIG_PACKAGE_conntrack=y
+CONFIG_PACKAGE_luci-app-1panel=y
+CONFIG_PACKAGE_luci-app-dockerman=y
+CONFIG_PACKAGE_docker=y
+CONFIG_PACKAGE_dockerd=y
+CONFIG_PACKAGE_docker-compose=y
+CONFIG_PACKAGE_luci-app-passwall=y
+CONFIG_PACKAGE_luci-app-openclash=y
+CONFIG_PACKAGE_luci-app-netwizard=y
+CONFIG_PACKAGE_luci-i18n-netwizard-zh-cn=y
+CONFIG_PACKAGE_luci-app-vantage=y
+CONFIG_PACKAGE_luci-i18n-vantage-zh-cn=y
+CONFIG_PACKAGE_luci-app-athena-led=y
+CONFIG_PACKAGE_athena-led=y
+CONFIG_PACKAGE_luci-app-harbor-file=y
+CONFIG_PACKAGE_openlist2=y
+CONFIG_PACKAGE_luci-app-openlist2=y
+CONFIG_PACKAGE_luci-i18n-openlist2-zh-cn=y
+CONFIG_PACKAGE_luci-app-diskman=y
+CONFIG_PACKAGE_luci-app-mini-diskmanager=n
+CONFIG_PACKAGE_qbittorrent=y
+CONFIG_PACKAGE_luci-app-qbittorrent=y
+CONFIG_PACKAGE_luci-app-fullconenat-sonic=y
+CONFIG_PACKAGE_luci-i18n-fullconenat-sonic-zh-cn=y
+CONFIG_PACKAGE_rtp2httpd=y
+CONFIG_PACKAGE_luci-app-rtp2httpd=y
+CONFIG_PACKAGE_luci-i18n-rtp2httpd-zh-cn=y
+CONFIG_PACKAGE_luci-app-package-manager=y
+CONFIG_PACKAGE_luci-i18n-package-manager-zh-cn=y
+CONFIG_PACKAGE_luci-app-store=y
+CONFIG_PACKAGE_luci-lib-taskd=y
+CONFIG_PACKAGE_luci-lib-xterm=y
+CONFIG_PACKAGE_taskd=y
+CONFIG_PACKAGE_luci-app-systools=y
+CONFIG_PACKAGE_luci-i18n-systools-zh-cn=y
+CONFIG_PACKAGE_luci-app-ttyd=y
+CONFIG_PACKAGE_luci-app-uugamebooster=y
+CONFIG_PACKAGE_nikki=y
+CONFIG_PACKAGE_luci-app-nikki=y
+CONFIG_PACKAGE_mihomo-meta=y
+CONFIG_PACKAGE_luci-app-subgen=y
+CONFIG_PACKAGE_vlmcsd=y
+CONFIG_PACKAGE_luci-app-vlmcsd=y
+CONFIG_PACKAGE_luci-app-workbuddy2api=y
+
+# 覆盖 GENERAL.txt 的通用项：这两个在 GENERAL 里是 =y，雅典娜上只编译不预装。
+CONFIG_PACKAGE_luci-app-homeproxy=m
+CONFIG_PACKAGE_luci-app-passwall2=m
