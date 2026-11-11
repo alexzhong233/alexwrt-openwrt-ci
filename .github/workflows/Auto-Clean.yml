@@ -5,9 +5,14 @@ name: Auto-Clean
 
 on:
   # 每天北京时间 05:21（比 06:17 的定时编译早）清理一次。
-  # 正式固件保留最近 3 个，TEST 生成的「只有 Config txt」的 pre-release 保留
-  # 最近 3 个，构建记录保留最近 30 天。两者分开计数 —— 连续点几次 TEST 也不会
-  # 把真正能刷机的固件挤掉。
+  #
+  # 保留规则按「tag 前缀」分组，而不是全局留 N 个：
+  #   IPQ60XX-ALEXWRT-WIFI-YES-alexzhong233-owrt-*      保持最近 3 个
+  #   IPQ60XX-LIBWRT-WIFI-YES-LiBwrt-LibWrt-...-*       保持最近 3 个
+  # 之前用 ophub/delete-releases-workflows 的 releases_keep_latest: 3 是全局
+  # 计数，两条线抢同一个名额 —— LIBWRT 连发三次，ALEXWRT 的固件就一个不剩了。
+  # TEST 的 pre-release 单独计数，且同样按线分组，连续点几次 TEST 不会挤掉
+  # 能刷机的正式固件。
   schedule:
     - cron: 21 21 * * *
   workflow_dispatch:
@@ -20,29 +25,50 @@ jobs:
   auto_clean:
     runs-on: ubuntu-latest
     steps:
-      # TEST 模式发出来的版本带 pre-release 标记，只留最近 3 个用来对比配置。
-      # 单个只有几百 KB，删早了反而没得比。
-      - name: Delete old TEST (pre-release) builds
-        uses: ophub/delete-releases-workflows@main
-        with:
-          gh_token: ${{secrets.GITHUB_TOKEN}}
-          delete_releases: true
-          prerelease_option: true
-          releases_keep_latest: 3
-          delete_tags: true
-          # 构建记录交给下一步统一处理，这里不重复跑。
-          delete_workflows: false
+      - name: Delete old releases (grouped by Config)
+        env:
+          GH_TOKEN: ${{secrets.GITHUB_TOKEN}}
+          GH_REPO: ${{github.repository}}
+          KEEP: 3
+        run: |
+          set -euo pipefail
 
-      # 正式固件（含 factory / sysupgrade 两个镜像）保留最近 3 个。
-      - name: Delete old releases and workflow runs
-        uses: ophub/delete-releases-workflows@main
-        with:
-          gh_token: ${{secrets.GITHUB_TOKEN}}
-          delete_releases: true
-          prerelease_option: false
-          releases_keep_latest: 3
-          # 被删掉的 Release 对应的 tag 一起删，避免 tag 越积越多。
-          delete_tags: true
-          delete_workflows: true
-          # 保留最近 30 天的构建记录。
-          workflows_keep_day: 30
+          # tag 形如 <Config>-<owner>-<branch>-YY.MM.DD-HH.MM.SS，
+          # 去掉末尾的日期时间就得到「这条线」的标识；再叠上 pre/正式
+          # 两个前缀，保证两类各成一组，互不占名额。
+          gh release list --repo "$GH_REPO" --limit 200 \
+              --json tagName,createdAt,isPrerelease \
+              --jq '
+                [ .[] | . + {group:
+                    ((if .isPrerelease then "pre:" else "rel:" end)
+                     + (.tagName | sub("-[0-9][0-9]\\.[0-9][0-9]\\.[0-9][0-9]-[0-9][0-9]\\.[0-9][0-9]\\.[0-9][0-9]$"; "")))
+                } ]
+                | group_by(.group)
+                | map(sort_by(.createdAt) | reverse | .['"$KEEP"':])
+                | flatten
+                | .[].tagName' |
+            while read -r TAG; do
+              [ -n "$TAG" ] || continue
+              echo "deleting release: $TAG"
+              # --cleanup-tag 一并删掉远端 tag，避免 tag 越积越多。
+              gh release delete "$TAG" --repo "$GH_REPO" --yes --cleanup-tag ||
+                echo "warning: failed to delete release $TAG"
+            done
+
+      - name: Delete old workflow runs
+        env:
+          GH_TOKEN: ${{secrets.GITHUB_TOKEN}}
+          GH_REPO: ${{github.repository}}
+          KEEP_DAYS: 30
+        run: |
+          set -euo pipefail
+          CUTOFF=$(date -u -d "$KEEP_DAYS days ago" +%Y-%m-%dT%H:%M:%SZ)
+          echo "removing runs older than $CUTOFF"
+          gh run list --repo "$GH_REPO" --limit 500 \
+              --json databaseId,createdAt \
+              --jq --arg c "$CUTOFF" '.[] | select(.createdAt < $c) | .databaseId' |
+            while read -r RUN_ID; do
+              [ -n "$RUN_ID" ] || continue
+              gh run delete "$RUN_ID" --repo "$GH_REPO" ||
+                echo "warning: failed to delete run $RUN_ID"
+            done
