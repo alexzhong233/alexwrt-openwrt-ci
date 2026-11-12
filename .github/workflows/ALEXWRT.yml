@@ -28,9 +28,11 @@ jobs:
     name: jdcloud_re-cs-02
     uses: ./.github/workflows/WRT-CORE.yml
     with:
+      # Config 名决定 release tag：<Config>-<owner>-<branch>-<date>。
+      # 用 OWRT 而不是 ALEXWRT，和 LIBWRT 那条线对称（IPQ60XX-OWRT / IPQ60XX-LIBWRT）。
       # 末尾的 -WIFI-YES 是必要的：WRT-CORE 用它来给固件文件名打 WIFI 标记，
       # 不写就会被识别成 none，文件名变成 ...-none-<日期>.bin
-      WRT_CONFIG: IPQ60XX-ALEXWRT-WIFI-YES
+      WRT_CONFIG: IPQ60XX-OWRT-WIFI-YES
       WRT_THEME: aurora
       WRT_NAME: alexWrt
       # 无线默认值（SSID / 密码 / 国家码 / 信道）不在这里传，由 Scripts/Handles.sh

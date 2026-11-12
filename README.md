@@ -11,7 +11,7 @@
 | 项目 | 位置 |
 |---|---|
 | 工作流 | `.github/workflows/ALEXWRT.yml`（调度入口）、`WRT-CORE.yml`（实际编译，被调用） |
-| 设备配置 | `Config/IPQ60XX-ALEXWRT-WIFI-YES.txt`（在 `GENERAL.txt` 之后写入，同名项以它为准） |
+| 设备配置 | `Config/IPQ60XX-OWRT-WIFI-YES.txt`（在 `GENERAL.txt` 之后写入，同名项以它为准） |
 | 软件包处理 | `Scripts/Packages.sh` |
 | 构建期设置 | `Scripts/Settings.sh`（后台地址、主机名）、`Scripts/Handles.sh`（主题与插件修补） |
 | 固件文件注入 | `Files/RE-CS-02/` |

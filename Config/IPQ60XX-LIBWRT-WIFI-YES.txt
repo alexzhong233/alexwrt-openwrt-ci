@@ -1,6 +1,6 @@
 # 京东云雅典娜 RE-CS-02 —— LibWrt 25.12-nss 试编版
 #
-# 与 IPQ60XX-ALEXWRT-WIFI-YES.txt 的唯一差别是 NSS 相关项：两个上游的
+# 与 IPQ60XX-OWRT-WIFI-YES.txt 的唯一差别是 NSS 相关项：两个上游的
 # NSS 实现完全不同，包名和 Kconfig 符号都不一样，不能混用。
 #
 #   VIKINGYFY/immortalwrt@owrt   nss-wifi-drv（自研驱动 + wifili 用户态）

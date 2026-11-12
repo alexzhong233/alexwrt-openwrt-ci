@@ -7,10 +7,10 @@ on:
   # 每天北京时间 05:21（比 06:17 的定时编译早）清理一次。
   #
   # 保留规则按「tag 前缀」分组，而不是全局留 N 个：
-  #   IPQ60XX-ALEXWRT-WIFI-YES-alexzhong233-owrt-*      保持最近 3 个
+  #   IPQ60XX-OWRT-WIFI-YES-alexzhong233-owrt-*         保持最近 3 个
   #   IPQ60XX-LIBWRT-WIFI-YES-LiBwrt-LibWrt-...-*       保持最近 3 个
   # 之前用 ophub/delete-releases-workflows 的 releases_keep_latest: 3 是全局
-  # 计数，两条线抢同一个名额 —— LIBWRT 连发三次，ALEXWRT 的固件就一个不剩了。
+  # 计数，两条线抢同一个名额 —— LIBWRT 连发三次，OWRT 的固件就一个不剩了。
   # TEST 的 pre-release 单独计数，且同样按线分组，连续点几次 TEST 不会挤掉
   # 能刷机的正式固件。
   schedule:

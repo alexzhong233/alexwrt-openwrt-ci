@@ -3,13 +3,17 @@
 
 name: LIBWRT
 
-# 试编用：把同一套 Config / Scripts 放到另一个上游基线上跑一版，用来对比
+# 每天跟着 ALEXWRT 一起出包：把同一套 Config / Scripts 放到另一个上游基线上编译
 #   · LiBwrt/LibWrt@25.12-nss —— ImmortalWrt 25.12 基线 + qosmio 系 qca-nss-drv/ecm
 #
-# 只保留手动触发，故意不加 schedule：
-#   · 日常刷的是 ALEXWRT.yml 那条线，这条编不编得出都不影响；
-#   · 两套缓存各自 2~3 GB，仓库上限 10 GB，同时按天跑会互相挤掉对方的缓存。
+# 两条线共用同一个下载缓存 key（wrt-dl-<target>-<hashFiles(Config/*.txt)>），
+# 所以时间必须错开：同时跑会抢同一个 key 写，后写的那个存不进去，下次还得重下。
+# 这里排在 ALEXWRT（北京 06:17）之后约 2.5 小时，等它把缓存写完再开工。
 on:
+  schedule:
+    # GitHub Actions 用 UTC；北京时间 08:47。
+    # 不用整点：GitHub 每小时 00 分负载最高，整点的定时任务经常被延迟或丢弃。
+    - cron: '47 0 * * *'
   workflow_dispatch:
     inputs:
       PACKAGE:
