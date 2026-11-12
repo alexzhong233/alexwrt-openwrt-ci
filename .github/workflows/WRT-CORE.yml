@@ -521,52 +521,21 @@ jobs:
 
             find ./bin/targets/ -type f -exec mv -f {} ./upload/ \;
 
-            # =m 的包（OpenClash、订阅转换 subgen）不进固件，编译产物在
-            # ./bin/packages/<arch>/<feed>/ 下。不一起发布的话，刷完固件在
-            # 软件源里搜不到它们，"编成 =m 供安装"就等于没做。
-            #
-            # 但只能发 Config 里显式写成 =m 的那些。OpenWrt 的默认值就是 m，
-            # 直接 find -name "*.apk" 会把几百个包全部收进去（第一次就是这么
-            # 翻车的），release 资产列表直接爆炸、体积也上去。
-            MKEEP=""
-            for CF in "$GITHUB_WORKSPACE/Config/GENERAL.txt" \
-                      "$GITHUB_WORKSPACE/Config/$WRT_CONFIG.txt" \
-                      "$GITHUB_WORKSPACE/Config/$WRT_EXTRA_CONFIG"; do
-              [ -f "$CF" ] || continue
-              MKEEP="$MKEEP $(grep -oE '^CONFIG_PACKAGE_[^=]+=m' "$CF" |
-                sed 's/^CONFIG_PACKAGE_//; s/=m$//')"
-            done
-            MKEEP=$(printf '%s\n' $MKEEP | sed '/^$/d' | sort -u)
-
-            # OpenClash dev 依赖 ruby，而 ruby 的运行时库不在 Config 里（它们由
-            # ruby 自己 DEPENDS 带入，默认就是 =m）。只发 Config 里那几个，
-            # 装 openclash 时 apk 解析依赖会直接失败。这里按前缀一并放行：
-            #   ruby*     → ruby / ruby-yaml / ruby-psych / ruby-enc ...
-            #   libruby*  → libruby3.4
-            #   libyaml*  → libyaml
-            #   libgmp*   → libgmp10
-            MKEEP="$MKEEP ruby libruby libyaml libgmp"
-            MKEEP=$(printf '%s\n' $MKEEP | sed '/^$/d' | sort -u)
-            echo "::notice::将发布的 =m 包: $(echo $MKEEP | tr '\n' ' ')"
-
-            mkdir -p ./upload/packages
-            for PKG in $MKEEP; do
-              # apk 文件名是 <name>-<ver>-r<n>.apk，ipk 是 <name>_<ver>.apk。
-              # 用前缀匹配是为了连带 ruby-* 这一串子包。
-              find ./bin/packages/ -type f \
-                \( -name "${PKG}*.apk" -o -name "${PKG}*.ipk" \) \
-                -exec cp -f {} ./upload/packages/ \; 2>/dev/null || true
-            done
-            echo "::notice::=m 包产物 $(ls -1 ./upload/packages/ 2>/dev/null | wc -l) 个，已放入 upload/packages/"
-
-            # 这三个是显式要求编成 =m 的。它们编不出来时固件本身仍然可用，
-            # 所以只 warn 不中断；但必须在日志里喊出来，否则用户刷完固件在
-            # 软件源里找不到包，会以为是固件的问题。
-            for MUST in luci-app-openclash luci-app-subgen ruby; do
-              if ! ls ./upload/packages/ 2>/dev/null | grep -q "^${MUST}[_-]"; then
-                echo "::warning::=m 包 $MUST 没有产物（软件源里装不到），检查它的源码是否拉取成功"
-              fi
-            done
+            # =m 的包（OpenClash、订阅转换 subgen）只编译、不发布。
+            # release 里只放固件，一个 apk 都不带。
+            # 它们的产物编译完就在 runner 上，随 runner 一起销毁 —— 这是
+            # 有意为之：改 =m 的目的是不占固件体积，不是另开一个分发渠道。
+            # 这里只统计数量并打日志，用来确认它们确实编出来了（编不出来
+            # 也不会让固件失败，但至少日志里看得见）。
+            if [ -d ./bin/packages ]; then
+              MCOUNT=$(find ./bin/packages/ -type f -name "*.apk" | wc -l)
+              for MUST in luci-app-openclash luci-app-subgen ruby; do
+                if ! find ./bin/packages/ -type f -name "${MUST}*.apk" | grep -q .; then
+                  echo "::warning::=m 包 $MUST 没有编出来，检查它的源码是否拉取成功"
+                fi
+              done
+              echo "::notice::=m 包编译产物 ${MCOUNT} 个（不发布，release 只发固件）"
+            fi
 
             # 上游的 sha256sums 已在上面删掉（里面的文件名都对不上改名后的
             # 固件），这里按最终文件名重新生成一份，刷机前可以校验完整性。
@@ -612,11 +581,8 @@ jobs:
           target_commitish: ${{ github.sha }}
           prerelease: ${{inputs.WRT_TEST}}
           # 用 * 而不是 *.*：SHA256SUMS 这类没有扩展名的文件也要一起发布。
-          # 第二行是 =m 的包产物（OpenClash、subgen 的 apk），必须一起发，
-          # 否则刷完固件在软件源里装不到它们。
-          files: |
-            ./wrt/upload/*
-            ./wrt/upload/packages/*
+          # 只发固件。=m 的包（OpenClash、subgen）只编译不发布，不进 release。
+          files: ./wrt/upload/*
           body: |
             这是个平台固件包，内含多个设备！
             请注意选择你需要的设备固件！
