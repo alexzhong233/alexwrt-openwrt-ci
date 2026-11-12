@@ -457,7 +457,7 @@ UPDATE_PACKAGE "qmodem-generic" "LianXia233/luci-app-qmodem-generic" "main"
 # 注意：luci-app-openclash 已改成从作者仓库 dev 分支 clone，不在 feeds 里，
 # 所以从下面的清单中移除，否则这里会误判成 feeds 失败而中断整个构建。
 for FEED_PKG in luci-app-passwall \
-	luci-app-diskman luci-app-qbittorrent qbittorrent \
+	luci-app-diskman luci-app-qbittorrent \
 	vlmcsd luci-app-vlmcsd sing-box; do
 	FOUND=""
 	for FEED_DIR in ./package/feeds/luci ./package/feeds/packages; do
@@ -468,7 +468,21 @@ for FEED_PKG in luci-app-passwall \
 		exit 1
 	fi
 done
-echo "feeds packages present: passwall / diskman / qbittorrent / vlmcsd / sing-box"
+
+# qBittorrent 换成了增强版（EE），不能塞进上面的循环：EE 的源码目录叫
+# qBittorrent-Enhanced-Edition，包名却是 qbittorrent-enhanced-edition，
+# feeds install 建哪个名字的软链取决于 feeds 脚本的版本，两个都认。
+QB_FOUND=""
+for QB_DIR in ./package/feeds/packages/qBittorrent-Enhanced-Edition \
+               ./package/feeds/packages/qbittorrent-enhanced-edition; do
+	[ -e "$QB_DIR" ] && QB_FOUND=1
+done
+if [ -z "$QB_FOUND" ]; then
+	echo "::error::qbittorrent-enhanced-edition 不在 feeds 里（feeds update/install 可能失败）" >&2
+	exit 1
+fi
+
+echo "feeds packages present: passwall / diskman / qbittorrent-ee / vlmcsd / sing-box"
 
 #引入私有扩展脚本
 if [ -f "$GITHUB_WORKSPACE/Scripts/PRIVATE.sh" ]; then

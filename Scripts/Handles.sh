@@ -349,3 +349,23 @@ ALLOW_MIRROR_HASH() {
 }
 
 ALLOW_MIRROR_HASH "network/config/firewall4"
+
+# ---------------------------------------------------------------- qBittorrent
+# luci-app-qbittorrent 的 LUCI_DEPENDS 写死 +qbittorrent，而 Config 里选的是
+# qbittorrent-enhanced-edition（EE 的 Makefile 声明 CONFLICTS:=qbittorrent）。
+# 不改这行，依赖解析阶段会认为 qbittorrent 不可选，把 luci-app-qbittorrent
+# 整个丢掉 —— 最后产出一个没有 BT 页面的固件，而构建照样显示成功。
+#
+# 为什么只改依赖名就够：EE 的 install 段装的是同一个 /usr/bin/qbittorrent-nox、
+# 同一份 /etc/init.d/qbittorrent（只多一行 Session\AutoBanUnknownPeer）、同一组
+# UCI 字段（enabled / download_dir / http_port），LuCI 页面读的也正是这些。
+QB_LUCI_DIR=$(PKG_DIR luci-app-qbittorrent) || QB_LUCI_DIR=""
+if [ -n "$QB_LUCI_DIR" ] && [ -f "$QB_LUCI_DIR/Makefile" ]; then
+	if grep -q '^LUCI_DEPENDS:=+qbittorrent$' "$QB_LUCI_DIR/Makefile"; then
+		sed -i 's/^LUCI_DEPENDS:=+qbittorrent$/LUCI_DEPENDS:=+qbittorrent-enhanced-edition/' \
+			"$QB_LUCI_DIR/Makefile"
+		echo "qbittorrent: luci-app-qbittorrent 依赖改为 qbittorrent-enhanced-edition"
+	else
+		echo "qbittorrent: luci-app-qbittorrent 的 LUCI_DEPENDS 不是预期的 +qbittorrent，跳过" >&2
+	fi
+fi

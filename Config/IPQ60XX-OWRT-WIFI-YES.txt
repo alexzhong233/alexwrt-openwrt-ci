@@ -92,7 +92,12 @@ CONFIG_PACKAGE_luci-i18n-openlist2-zh-cn=y
 CONFIG_PACKAGE_luci-app-diskman=y
 # 与当前路由器软件清单保持一致：用 diskman，不额外装 mini-diskmanager。
 CONFIG_PACKAGE_luci-app-mini-diskmanager=n
-CONFIG_PACKAGE_qbittorrent=y
+# qBittorrent 用增强版（EE，c0re100 fork）：反吸血、Peer 白/黑名单、
+# 自动封禁未知客户端。EE 的 Makefile 声明 CONFLICTS:=qbittorrent，两者互斥。
+# luci-app-qbittorrent 的 LUCI_DEPENDS 原本写死 +qbittorrent，由 Handles.sh
+# 在构建期改指向 EE —— 两个包 install 的文件完全一致（同一个
+# /usr/bin/qbittorrent-nox、同一份 init、同一组 UCI 字段），页面不用动。
+CONFIG_PACKAGE_qbittorrent-enhanced-edition=y
 CONFIG_PACKAGE_luci-app-qbittorrent=y
 # fullconenat-sonic 本体已在 GENERAL.txt 里选了，这里只补 LuCI 页面和翻译。
 CONFIG_PACKAGE_luci-app-fullconenat-sonic=y
