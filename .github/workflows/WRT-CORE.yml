@@ -162,6 +162,17 @@ jobs:
           } >> "$GITHUB_ENV"
           echo "cache_prefix=$WRT_CACHE_PREFIX" >> "$GITHUB_OUTPUT"
 
+          # LibWrt 那条线的上游 base-files 不带 /etc/shadow 的 root 密码，
+          # 刷完就是彻底无密码：LuCI 打开直接进，SSH 用 root + 空密码。
+          # 这件事必须在 release 说明里喊出来，否则刷完的人不会想到去设密码，
+          # 同网段任何人都能改配置。
+          # OWRT 那条线保持原样（首次登录会引导设置），这里留空。
+          if echo "$WRT_CONFIG" | grep -qi "LIBWRT"; then
+            echo "WRT_LOGIN_NOTE=⚠ 本版本（LibWrt 基线）root 默认没有密码：浏览器打开 http://${WRT_IP:-192.168.88.1} 直接进入，SSH 用 root + 空密码。刷完请立刻执行 passwd 或到「系统 → 管理权」设置密码，否则同网段任何人都能改你的路由器。" >> "$GITHUB_ENV"
+          else
+            echo "WRT_LOGIN_NOTE=" >> "$GITHUB_ENV"
+          fi
+
       - name: Clone Code
         id: clone-code
         run: |
@@ -625,6 +636,7 @@ jobs:
             主机名：${{env.WRT_NAME}}
             登录地址：${{env.WRT_IP}}
             登录密码：${{env.WRT_PW}}
+            ${{ env.WRT_LOGIN_NOTE }}
 
             WIFI名称：alexwrt-jdcloud-2.4g / alexwrt-jdcloud-5.2g / alexwrt-jdcloud-5.8g
             WIFI密码：12345678
