@@ -1,0 +1,27 @@
+# 自定义软件包源 —— LibWrt 线专用（构建时由 WRT-CORE 按线重命名为 customfeeds.list）
+#
+# 这里**故意不写** immortalwrt 的镜像源（OWRT 线用的是南京大学那份）。
+# 两个原因，任何一个都会把系统装坏：
+#
+#   1) 签名不匹配。LibWrt 的 apk 密钥是它自己的，immortalwrt 的 packages.adb
+#      用 immortalwrt 的私钥签，apk update 只会刷一串
+#        WARNING: ... UNTRUSTED signature
+#      包也装不上。2026-11-12 的 libwrt 固件就是这么报的。
+#
+#   2) ABI 不匹配。两棵源码树的内核版本和依赖版本不同，kmod-* 混装会直接
+#      开不了机。签名放行（--allow-untrusted）只会让问题从"装不上"变成
+#      "装上了起不来"，更糟。
+#
+# 所以这条线只用它自带的 distfeeds.list —— 由 base-files 按 CONFIG_VERSION_REPO
+# 生成，指向 LibWrt 自己的发布站点（当前是 mirrors.vsean.net）。
+#
+# 如果 apk update 报某条 distfeeds 地址 unavailable，那是上游镜像没同步，
+# 属于 LibWrt 侧的问题，跟我们无关，也不该用 immortalwrt 的源去顶。
+#
+# 以后若找到 LibWrt 自己的镜像（同一个签名、同一棵 snapshot 树），按下面格式追加：
+#
+# https://<libwrt-mirror>/releases/25.12-SNAPSHOT/targets/qualcommax/ipq60xx/packages/packages.adb
+# https://<libwrt-mirror>/releases/25.12-SNAPSHOT/packages/aarch64_cortex-a53/base/packages.adb
+# https://<libwrt-mirror>/releases/25.12-SNAPSHOT/packages/aarch64_cortex-a53/luci/packages.adb
+# https://<libwrt-mirror>/releases/25.12-SNAPSHOT/packages/aarch64_cortex-a53/packages/packages.adb
+# https://<libwrt-mirror>/releases/25.12-SNAPSHOT/packages/aarch64_cortex-a53/routing/packages.adb

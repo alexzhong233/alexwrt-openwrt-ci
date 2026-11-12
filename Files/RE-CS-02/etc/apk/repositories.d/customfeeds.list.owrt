@@ -1,4 +1,10 @@
-# 自定义软件包源（南京大学镜像）。
+# 自定义软件包源（南京大学镜像）—— OWRT 线专用
+#
+# 文件名末尾的 .owrt 只是构建期的标记：WRT-CORE 的 Install Custom Files
+# 会按 WRT_CONFIG 挑一份重命名成 customfeeds.list，另一份删掉。
+# LIBWRT 线不能用这份 —— immortalwrt 的 packages.adb 签名不被 LibWrt 认，
+# 会刷 UNTRUSTED signature，且两棵树 ABI 不同，kmod 混装会装坏系统。
+# 详见同目录的 customfeeds.list.libwrt。
 #
 # 这里只追加，不覆盖 /etc/apk/repositories.d/distfeeds.list：
 # distfeeds.list 由 base-files 在编译时按 feeds.conf.default 生成，指向

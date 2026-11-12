@@ -248,6 +248,31 @@ jobs:
             exit 1
           fi
 
+          # 软件源按线二选一。
+          #
+          # Files 里放的是 customfeeds.list.owrt 和 customfeeds.list.libwrt 两份模板，
+          # 后缀不是 .list，apk 不会读。这里按 WRT_CONFIG 挑一份改名生效、另一份删掉。
+          #
+          # 为什么要分：OWRT 用的南京大学镜像是 immortalwrt 的验证包，
+          # LibWrt 固件的 apk 密钥是它自己的，加进去只会刷 "UNTRUSTED signature"；
+          # 而且两棵树内核版本不同，kmod-* 混装会直接起不来。
+          REPO_DIR=./files/etc/apk/repositories.d
+          if [ -d "$REPO_DIR" ]; then
+            case "$WRT_CONFIG" in
+              *LIBWRT*) KEEP=libwrt ;;
+              *)        KEEP=owrt ;;
+            esac
+            for F in "$REPO_DIR"/customfeeds.list.*; do
+              [ -f "$F" ] || continue
+              case "$F" in
+                *."$KEEP") mv -f "$F" "$REPO_DIR/customfeeds.list" ;;
+                *)         rm -f "$F" ;;
+              esac
+            done
+            echo "自定义软件源模板: 已选用 $KEEP"
+            ls -1 "$REPO_DIR"
+          fi
+
       - name: Custom Settings
         run: |
           cd ./wrt/
