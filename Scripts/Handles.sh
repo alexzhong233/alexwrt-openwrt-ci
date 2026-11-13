@@ -6,6 +6,10 @@ FEEDS_PATH="./feeds"
 PACKAGE_PATH="./package"
 TARGET_PATH="./target"
 
+#本脚本自己的目录（整份替换某个文件时用它定位 Scripts/patches/）
+SCRIPTS_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" 2>/dev/null && pwd)"
+[ -n "$SCRIPTS_DIR" ] && [ -d "$SCRIPTS_DIR" ] || SCRIPTS_DIR="$GITHUB_WORKSPACE/Scripts"
+
 #包目录解析：自建包克隆在 ./package/<name>，改用官方 feeds 的包在
 #./package/feeds/<feed>/<name>（feeds install 生成的软链）。同一个包只会在其中
 #一处，按顺序找，找不到返回空串（调用方用 -f / -d 判断即可）。
@@ -344,4 +348,19 @@ ALLOW_MIRROR_HASH() {
 }
 
 ALLOW_MIRROR_HASH "network/config/firewall4"
+
+#diskman 磁盘列表：分区条把整张表撑爆
+#上游 luasrc/view/diskman/disk_info.htm 里，分区条那行写死 colspan="15"，而磁盘表
+#只有 8 列（路径/型号/序列号/容量/温度/分区表/SATA/健康），浏览器会给表格补出 7 个
+#空列；再加上每一段用 inline-block，标签文字会算进表格最小宽度。结果是整张表比
+#窗口还宽：表头只占前 8 列、右边空一大片，容量/温度/分区表/健康几列直接被挤到屏幕
+#外，分区条自己也被切断。
+#改法：colspan 取实际列数、td 加 overflow:hidden（自成 BFC，包住 float 也算高度）、
+#分段改 float + 省略号。改动分散在 4 处，整份替换比 sed 可靠。
+DISKMAN_DIR="$(PKG_DIR "luci-app-diskman")"
+DISKMAN_VIEW="$DISKMAN_DIR/luasrc/view/diskman/disk_info.htm"
+if [ -f "$DISKMAN_VIEW" ] && [ -f "$SCRIPTS_DIR/patches/diskman/disk_info.htm" ]; then
+	FIX "diskman" "$DISKMAN_DIR" cp -f "$SCRIPTS_DIR/patches/diskman/disk_info.htm" "$DISKMAN_VIEW"
+fi
+
 

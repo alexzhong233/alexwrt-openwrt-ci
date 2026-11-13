@@ -1,0 +1,118 @@
+<script type="text/javascript">
+  window.onload = function () {
+    //disk partition info
+    let p_colors = ["#c0c0ff", "#fbbd00", "#e97c30", "#a0e0a0", "#e0c0ff"]
+    let lines = document.querySelectorAll('[id^=cbi-disk-]')
+    lines.forEach((item) => {
+      let dev = item.id.match(/cbi-disk-(.*)/)[1]
+      if (dev == "table") { return }
+      XHR.get('<%=luci.dispatcher.build_url("admin/system/diskman/get_disk_info")%>/' + dev, null, (x, disk_info) => {
+        // handle disk info
+        item.childNodes.forEach((cell) => {
+          if (cell && cell.attributes) {
+            if (cell.getAttribute("data-name") == "sn" || cell.childNodes[1] && cell.childNodes[1].id.match(/sn/)) {
+              cell.innerText = disk_info.sn || "-"
+            } else if (cell.getAttribute("data-name") == "temp" || cell.childNodes[1] && cell.childNodes[1].id.match(/temp/)) {
+              cell.innerText = disk_info.temp || "-"
+            } else if (cell.getAttribute("data-name") == "p_table" || cell.childNodes[1] && cell.childNodes[1].id.match(/p_table/)) {
+              cell.innerText = disk_info.p_table || "-"
+            } else if (cell.getAttribute("data-name") == "sata_ver" || cell.childNodes[1] && cell.childNodes[1].id.match(/sata_ver/)) {
+              cell.innerText = disk_info.sata_ver || "-"
+            } else if (cell.getAttribute("data-name") == "health_status" || cell.childNodes[1] && cell.childNodes[1].id.match(/health_status/)) {
+              cell.innerText = (disk_info.health || "-") + "\n" + (disk_info.status || "-")
+            } else if (cell.getAttribute("data-name") == "health" || cell.childNodes[1] && cell.childNodes[1].id.match(/health/)) {
+              cell.innerText = disk_info.health || "-"
+            } else if (cell.getAttribute("data-name") == "status" || cell.childNodes[1] && cell.childNodes[1].id.match(/status/)) {
+              cell.innerText = disk_info.status || "-"
+            }
+          }
+        })
+        // handle partitons info
+        if (disk_info.partitions && disk_info.partitions.length > 0) {
+          let partitons_div
+          // 跨列数取实际列数：原来写死 15，而磁盘表只有 8 列，浏览器会给表格
+          // 补出 7 个空列 —— 表头只占前 8 列、右边空一大片，整张表被撑到比窗口
+          // 还宽，容量/温度/分区表/健康这几列直接跑到屏幕外。
+          let ncol = (item.cells && item.cells.length) || 8
+          if (item.nodeName == "TR") {
+            // overflow:hidden 让 td 自成一个块级格式化上下文：里面的 float 被包住，
+            // 高度也算进去（否则整行塌成 0）。原来的 position:absolute 会飞出去。
+            partitons_div = '<tr width="100%"><td style="margin:0px; padding:0px; border:0px; overflow:hidden;" colspan="' + ncol + '">'
+          } else if (item.nodeName == "DIV") {
+            partitons_div = '<div class="tr cbi-section-table-row cbi-rowstyle-1"><div style="overflow:hidden; width:100%">'
+          }
+          let expand = 0
+          let need_expand = 0
+          disk_info.partitions.forEach((part) => {
+            let p = part.size / disk_info.size * 100
+            if (p <= 8) {
+              expand += 8
+              need_expand += p
+              part.part_percent = 8
+            }
+          })
+          let n = 0
+          disk_info.partitions.forEach((part) => {
+            let p = part.size / disk_info.size * 100
+            if (p > 8) {
+              part.part_percent = p * (100 - expand) / (100 - need_expand)
+            }
+            let part_percent = part.part_percent + '%'
+            let p_color = p_colors[n++]
+            if (n > 4) { n = 0 }
+            let inline_txt = (part.name != '-' && part.name || '') + ' ' + (part.fs != 'Free Space' && part.fs || '') + ' ' + part.size_formated + ' ' + (part.useage != '-' && part.useage || '')
+            // float 而不是 inline-block：inline-block 的文字会算进表格的最小宽度，
+            // 分区多、标签长的时候整张表被撑爆；float 不参与最小宽度计算。
+            let partiton_div = '<div title="' + inline_txt + '" style="color:#525F7F; float:left; box-sizing:border-box; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; text-align:center; background-color:' + p_color + '; width:' + part_percent + '">' + inline_txt + '</div>'
+            partitons_div += partiton_div
+          })
+          if (item.nodeName == "TR") {
+            partitons_div += '</td></tr>'
+          } else if (item.nodeName == "DIV") {
+            partitons_div += '</div><div>&nbsp</div></div>'
+          }
+          item.insertAdjacentHTML('afterend', partitons_div);
+        }
+      })
+    })
+    //raid table
+    lines = document.querySelectorAll('[id^=cbi-_raid-]')
+    lines.forEach((item) => {
+      let dev = item.id.match(/cbi-_raid-(.*)/)[1]
+      if (dev == "table") { return }
+      console.log(dev)
+      XHR.get('<%=luci.dispatcher.build_url("admin/system/diskman/get_disk_info")%>/' + dev, null, (x, disk_info) => {
+        // handle raid info
+        item.childNodes.forEach((cell) => {
+          if (cell && cell.attributes) {
+            if (cell.getAttribute("data-name") == "p_table" || cell.childNodes[1] && cell.childNodes[1].id.match(/p_table/)) {
+                  cell.innerText = disk_info.p_table || "-"
+                }
+          }
+        })
+        // handle partitons info
+        let partitons_div
+        if (item.nodeName == "TR") {
+          partitons_div = '<tr width="100%" style="white-space:nowrap;"><td style="margin:0px; padding:0px; border:0px; white-space:nowrap;" colspan="15">'
+        } else if (item.nodeName == "DIV") {
+          partitons_div = '<div class="tr cbi-section-table-row cbi-rowstyle-1"><div style="white-space:nowrap; position:absolute; width:100%">'
+        }
+        let n = 0
+        disk_info.partitions.forEach((part) => {
+          let part_percent = part.size / disk_info.size * 100 + '%'
+          let p_color = p_colors[n++]
+          if (n > 4) { n = 0 }
+          let inline_txt = (part.name != '-' && part.name || '') + ' ' + (part.fs != 'Free Space' && part.fs || '') + ' ' + part.size_formated + ' ' + (part.useage != '-' && part.useage || '')
+          let partiton_div = '<div title="' + inline_txt + '" style="display:inline-block; text-align:center;background-color:' + p_color + '; width:' + part_percent + '">' + inline_txt + '</div>'
+          partitons_div += partiton_div
+        })
+        if (item.nodeName == "TR") {
+          partitons_div += '</td></tr>'
+        } else if (item.nodeName == "DIV") {
+          partitons_div += '</div><div>&nbsp</div></div>'
+        }
+        item.insertAdjacentHTML('afterend', partitons_div);
+      })
+    })
+  }
+</script>
