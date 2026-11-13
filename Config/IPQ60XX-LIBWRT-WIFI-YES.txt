@@ -95,7 +95,12 @@ CONFIG_PACKAGE_luci-app-netbird=y
 CONFIG_PACKAGE_luci-app-netbird-tools=y
 CONFIG_PACKAGE_luci-i18n-netbird-zh-cn=y
 CONFIG_PACKAGE_conntrack=y
-CONFIG_PACKAGE_luci-app-1panel=y
+# 服务合集（luci-app-hub）：qBittorrent / OpenList / 1Panel / WorkBuddy2API
+# 四个服务一个页面、页签切换，四种 qB 与三种 OpenList 运行方式都在页面里按需
+# 安装，所以固件不预装 qbittorrent、openlist 本体，也不预装旧的
+# luci-app-1panel / luci-app-workbuddy2api 页面。容器能力靠下面已有的
+# docker/dockerd/docker-compose。
+CONFIG_PACKAGE_luci-app-hub=y
 CONFIG_PACKAGE_luci-app-dockerman=y
 CONFIG_PACKAGE_docker=y
 CONFIG_PACKAGE_dockerd=y
@@ -121,18 +126,8 @@ CONFIG_PACKAGE_luci-i18n-vantage-zh-cn=y
 CONFIG_PACKAGE_luci-app-athena-led=y
 CONFIG_PACKAGE_athena-led=y
 CONFIG_PACKAGE_luci-app-harbor-file=y
-CONFIG_PACKAGE_openlist2=y
-CONFIG_PACKAGE_luci-app-openlist2=y
-CONFIG_PACKAGE_luci-i18n-openlist2-zh-cn=y
 CONFIG_PACKAGE_luci-app-diskman=y
 CONFIG_PACKAGE_luci-app-mini-diskmanager=n
-# qBittorrent 用增强版（EE，c0re100 fork）：反吸血、Peer 白/黑名单、
-# 自动封禁未知客户端。EE 的 Makefile 声明 CONFLICTS:=qbittorrent，两者互斥。
-# luci-app-qbittorrent 的 LUCI_DEPENDS 原本写死 +qbittorrent，由 Handles.sh
-# 在构建期改指向 EE —— 两个包 install 的文件完全一致（同一个
-# /usr/bin/qbittorrent-nox、同一份 init、同一组 UCI 字段），页面不用动。
-CONFIG_PACKAGE_qbittorrent-enhanced-edition=y
-CONFIG_PACKAGE_luci-app-qbittorrent=y
 CONFIG_PACKAGE_luci-app-fullconenat-sonic=y
 CONFIG_PACKAGE_luci-i18n-fullconenat-sonic-zh-cn=y
 CONFIG_PACKAGE_rtp2httpd=y
@@ -154,7 +149,6 @@ CONFIG_PACKAGE_mihomo-meta=y
 CONFIG_PACKAGE_luci-app-subgen=m
 CONFIG_PACKAGE_vlmcsd=y
 CONFIG_PACKAGE_luci-app-vlmcsd=y
-CONFIG_PACKAGE_luci-app-workbuddy2api=y
 
 # 覆盖 GENERAL.txt 的通用项：这两个在 GENERAL 里是 =y，雅典娜上只编译不预装。
 CONFIG_PACKAGE_luci-app-homeproxy=m

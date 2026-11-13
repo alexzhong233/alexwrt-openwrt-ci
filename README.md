@@ -59,11 +59,18 @@ set ${s}.country='${country || 'US'}'
 ## 固件内置内容
 
 - OpenAppFilter：`appfilter`、`kmod-oaf`、`luci-app-oaf` 和中文翻译，页面在“服务 -> 应用过滤”。
-- 雅典娜 LED、Harbor File、OpenList、qBittorrent、UU 游戏加速、KMS。
-- Docker、Docker Compose、1Panel 页 [`luci-app-1panel`](https://github.com/alexzhong233/luci-app-1panel)（裸机安装官方 v2、检测更新、启停、看状态、打开面板；程序装 overlay，数据放 `/mnt`）、NetBird LuCI、FullConeNAT、RTP2HTTPD、软件包管理器、SysTools。
+- 雅典娜 LED、Harbor File、UU 游戏加速、KMS。qBittorrent 与 OpenList **不在固件里**，
+  由下面的「服务合集」页面按需安装。
+- Docker、Docker Compose、服务合集页 [`luci-app-hub`](https://github.com/alexzhong233/luci-app-hub)：
+  qBittorrent / OpenList / 1Panel / WorkBuddy2API 四个服务收在一个页面，页签切换。
+  qBittorrent 可选原生官方版、原生增强版（EE）、容器官方版、容器增强版；OpenList 可选
+  feeds 版、openlist2、容器版；1Panel 和 WorkBuddy2API 各有本地/容器两套。数据目录优先
+  挂 `/mnt/sda1`，切换运行方式不丢配置。页面只含 ctl 与界面，本体全在运行时安装。
+  另内置 NetBird LuCI、FullConeNAT、RTP2HTTPD、软件包管理器、SysTools。
 - NSS：`nss-firmware`、`kmod-nss-wifi-drv`、`ATH11K_NSS_WIFI` 与 ath11k/mac80211 NSS 补丁都来自上游源码；自建状态页 `luci-app-nss-status` 在“状态 -> NSS 卸载”，直接读 `nss-wifi-drv` 的 debugfs 显示加速状态、各 vdev 收发计数和流表，不含驱动，不负责开启 NSS。
 - 默认进 rootfs：NetBird、PassWall、OpenClash、Dockerman。HomeProxy 和 PassWall2 只编译为可安装模块。
-- 不进固件：ZeroTier、易有云文件管理器。WorkBuddy2API 已整个移出构建，界面和拉取脚本都留在 `backup/`。
+- 不进固件：ZeroTier、易有云文件管理器、qBittorrent、OpenList 本体，以及旧的
+  `luci-app-1panel` / `luci-app-workbuddy2api` 页面（功能已并入服务合集）。
 - NetBird 使用原生 CLI，`netbird up` 不做任何参数包装，行为由 LuCI 的 NetBird 页面决定。
 
 软件包在 CI 里由 `Scripts/Packages.sh` 下载进编译树，仓库不保存编译好的 `.ipk`。脚本装到 `/usr/bin/`，说明文档装到 `/usr/share/alexwrt/`，都不注册为常驻服务。逐包核对见 [docs/SOFTWARE-AUDIT.md](docs/SOFTWARE-AUDIT.md)。

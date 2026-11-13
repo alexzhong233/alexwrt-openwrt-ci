@@ -182,13 +182,8 @@ RELOCATE_MENU() {
 
 RELOCATE_MENU "netbird" "$PACKAGE_PATH/luci-app-netbird" \
 	"admin/services/netbird" "admin/vpn/netbird"
-#openlist2（sbwml）的菜单键是 admin/services/openlist2，父键是子键前缀，
-#一次替换覆盖「设置」和「日志」两个子页。
-RELOCATE_MENU "openlist2" "$PACKAGE_PATH/luci-app-openlist2" \
-	"admin/services/openlist2" "admin/nas/openlist2"
-QBITTORRENT_DIR=$(PKG_DIR luci-app-qbittorrent) || QBITTORRENT_DIR=""
-RELOCATE_MENU "qbittorrent" "$QBITTORRENT_DIR" \
-	"admin/services/qbittorrent" "admin/nas/qbittorrent"
+#openlist2 / qbittorrent 不再预装（qB 与 OpenList 由 luci-app-hub 的页面按需
+#装），所以这里也不再迁它们的菜单 —— 构建树里根本没有这两个包。
 #Dockerman 用的是 lisaac 0.5.26（Lua 控制器），它自己就建了
 #entry({"admin","docker"}, firstchild())，顶层「Docker」菜单不需要额外处理。
 #雅典娜屏控刻意留在上游的「服务」下，不做菜单迁移：
@@ -350,22 +345,3 @@ ALLOW_MIRROR_HASH() {
 
 ALLOW_MIRROR_HASH "network/config/firewall4"
 
-# ---------------------------------------------------------------- qBittorrent
-# luci-app-qbittorrent 的 LUCI_DEPENDS 写死 +qbittorrent，而 Config 里选的是
-# qbittorrent-enhanced-edition（EE 的 Makefile 声明 CONFLICTS:=qbittorrent）。
-# 不改这行，依赖解析阶段会认为 qbittorrent 不可选，把 luci-app-qbittorrent
-# 整个丢掉 —— 最后产出一个没有 BT 页面的固件，而构建照样显示成功。
-#
-# 为什么只改依赖名就够：EE 的 install 段装的是同一个 /usr/bin/qbittorrent-nox、
-# 同一份 /etc/init.d/qbittorrent（只多一行 Session\AutoBanUnknownPeer）、同一组
-# UCI 字段（enabled / download_dir / http_port），LuCI 页面读的也正是这些。
-QB_LUCI_DIR=$(PKG_DIR luci-app-qbittorrent) || QB_LUCI_DIR=""
-if [ -n "$QB_LUCI_DIR" ] && [ -f "$QB_LUCI_DIR/Makefile" ]; then
-	if grep -q '^LUCI_DEPENDS:=+qbittorrent$' "$QB_LUCI_DIR/Makefile"; then
-		sed -i 's/^LUCI_DEPENDS:=+qbittorrent$/LUCI_DEPENDS:=+qbittorrent-enhanced-edition/' \
-			"$QB_LUCI_DIR/Makefile"
-		echo "qbittorrent: luci-app-qbittorrent 依赖改为 qbittorrent-enhanced-edition"
-	else
-		echo "qbittorrent: luci-app-qbittorrent 的 LUCI_DEPENDS 不是预期的 +qbittorrent，跳过" >&2
-	fi
-fi

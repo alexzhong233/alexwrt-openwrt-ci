@@ -265,13 +265,12 @@ UPDATE_TOPLEVEL_PACKAGE "luci-app-nssecm" "Arthur97172/luci-app-nssecm" "main"
 # 以前拆成两半——页面在 LuCI/，三个脚本在 Files/ 覆盖层——现在合成一个包，
 # 全部由仓库安装，路径不变（/usr/bin/netbird-*、/etc/init.d/netbird-passwall-compat-watch）。
 UPDATE_TOPLEVEL_PACKAGE "luci-app-netbird-tools" "alexzhong233/luci-app-netbird-tools" "main"
-# 1Panel v2 裸机版：安装 / 更新检测 / 状态 / 启停。官方包自带 procd 脚本，
-# 不需要容器；页面和 1panel-ctl 都在这个仓库里。
-UPDATE_TOPLEVEL_PACKAGE "luci-app-1panel" "alexzhong233/luci-app-1panel" "main"
-# WorkBuddy2API 四选一安装页（本地/容器 × 原版/Rust）。包里只有页面、ctl 和
-# Rust 版的 procd 脚本，应用本体由页面按需下载；四套共用一份 accounts/，
-# 所以不预装任何一套，也不依赖 python3（装本地·原版时由上游包自己带）。
-UPDATE_TOPLEVEL_PACKAGE "luci-app-workbuddy2api" "alexzhong233/luci-app-workbuddy2api" "main"
+# 服务合集（luci-app-hub）：qBittorrent / OpenList / 1Panel / WorkBuddy2API
+# 四个服务收进一个页面，页签切换。这里合并了原来独立的 luci-app-1panel 与
+# luci-app-workbuddy2api —— 那两个仓库仍可单独安装，但固件只引入这一个，
+# 避免同一套 ctl 装两遍、菜单重复。qBittorrent / OpenList 由页面按需 apk
+# 安装，固件不再预装本体。
+UPDATE_TOPLEVEL_PACKAGE "luci-app-hub" "alexzhong233/luci-app-hub" "main"
 
 # 订阅转换（alexwrt-subgen）：Go 服务 + LuCI 控制台 + rpcd 插件。
 # 包不在仓库根，而在 luci-app/ 子目录，所以走 NESTED 提取。
@@ -377,14 +376,12 @@ UPDATE_PACKAGE "viking" "VIKINGYFY/packages" "main" "" "axonhub gecoosac miniupn
 # 官方版另有 libcronet 的问题，补丁在 Handles.sh。
 rm -rf ./package/packages/sing-box
 
-# diskman / qbittorrent 也回到官方 feeds：
+# diskman 也回到官方 feeds：
 #   · luci-app-diskman 0.2.13（lisaac，Lua + luci-compat）比 sbwml 1.0.0 多了
 #     RAID（mdadm + kmod-md-raid456/linear）、btrfs 子卷、NTFS3 与 cp932/936/950
 #     三种文件名编码；luci-compat 我们本来就装着，实际只多几个 kmod。
-#   · luci-app-qbittorrent：核心两版都是 5.3.0、同一个 codeload tarball，Qt6 更是
-#     同为 6.12.0、libtorrent 同为 2.0.15 —— sbwml 仓库自带的 qt6base/qt6tools/
-#     rblibtorrent 和 feeds 完全同版本，唯一差别是页面拆成 config + log 两页。
-#     顺带少 clone 一个自带整套 Qt6 的大仓库。
+# qBittorrent 不需要在这里 clone：固件不预装它，由 luci-app-hub 的页面在
+# 运行时从 apk 源装（官方版 / EE 版二选一）。
 UPDATE_PACKAGE "diskmanager" "4IceG/luci-app-mini-diskmanager" "main"
 UPDATE_PACKAGE "mosdns" "sbwml/luci-app-mosdns" "v5" "" "v2dat"
 # UU 走自建 fork（基于 xiaodoudou/luci-app-uugamebooster，每天自动合并上游）：
@@ -400,7 +397,11 @@ UPDATE_PACKAGE "uugamebooster" "alexzhong233/luci-app-uugamebooster" "master" "p
 UPDATE_PACKAGE "quickfile" "sbwml/luci-app-quickfile" "main"
 # OpenList 用 sbwml 的 luci-app-openlist2：仓库顶层同时带 openlist2（二进制与
 # init）和 luci-app-openlist2（界面），整个 clone 进 package/ 即可，不需要 feeds。
-# 数据目录 /etc/openlist2，UCI 段名 openlist2，菜单由 Handles.sh 搬到「NAS」。
+# 数据目录 /etc/openlist2，UCI 段名 openlist2。
+# 现在 Config 里不再选它（固件不预装 OpenList），保留 clone 只是让构建树里
+# 有这份源码：luci-app-hub 页面的 openlist2 选项走运行时 apk 安装，装的是源里
+# 那份；要回到预装就把 Config 里三行加回来。注意它不在官方 apk 源里，运行时
+# 装会失败，实际建议用 feeds 版或容器版。
 UPDATE_PACKAGE "openlist2" "sbwml/luci-app-openlist2" "main"
 
 # 当前路由器使用的 SysTools 来自 LinkEase 应用扩展仓库。
@@ -447,8 +448,7 @@ UPDATE_PACKAGE "mt5700m" "LianXia233/luci-app-mt5700m" "main"
 UPDATE_PACKAGE "netmonitor" "LianXia233/luci-app-netmonitor" "main"
 UPDATE_PACKAGE "qmodem-generic" "LianXia233/luci-app-qmodem-generic" "main"
 
-# 改用官方 feeds 的包（passwall / diskman / qbittorrent /
-# vlmcsd / sing-box）。
+# 改用官方 feeds 的包（passwall / diskman / vlmcsd / sing-box）。
 #
 # 它们不在上面的自建包清单里，所以 WRT-CORE 的 "Verify Package Selection" 只会
 # 报 warning 而不会失败；feeds update/install 出问题时，make defconfig 会静默
@@ -457,7 +457,7 @@ UPDATE_PACKAGE "qmodem-generic" "LianXia233/luci-app-qmodem-generic" "main"
 # 注意：luci-app-openclash 已改成从作者仓库 dev 分支 clone，不在 feeds 里，
 # 所以从下面的清单中移除，否则这里会误判成 feeds 失败而中断整个构建。
 for FEED_PKG in luci-app-passwall \
-	luci-app-diskman luci-app-qbittorrent \
+	luci-app-diskman \
 	vlmcsd luci-app-vlmcsd sing-box; do
 	FOUND=""
 	for FEED_DIR in ./package/feeds/luci ./package/feeds/packages; do
@@ -469,20 +469,7 @@ for FEED_PKG in luci-app-passwall \
 	fi
 done
 
-# qBittorrent 换成了增强版（EE），不能塞进上面的循环：EE 的源码目录叫
-# qBittorrent-Enhanced-Edition，包名却是 qbittorrent-enhanced-edition，
-# feeds install 建哪个名字的软链取决于 feeds 脚本的版本，两个都认。
-QB_FOUND=""
-for QB_DIR in ./package/feeds/packages/qBittorrent-Enhanced-Edition \
-               ./package/feeds/packages/qbittorrent-enhanced-edition; do
-	[ -e "$QB_DIR" ] && QB_FOUND=1
-done
-if [ -z "$QB_FOUND" ]; then
-	echo "::error::qbittorrent-enhanced-edition 不在 feeds 里（feeds update/install 可能失败）" >&2
-	exit 1
-fi
-
-echo "feeds packages present: passwall / diskman / qbittorrent-ee / vlmcsd / sing-box"
+echo "feeds packages present: passwall / diskman / vlmcsd / sing-box"
 
 #引入私有扩展脚本
 if [ -f "$GITHUB_WORKSPACE/Scripts/PRIVATE.sh" ]; then
