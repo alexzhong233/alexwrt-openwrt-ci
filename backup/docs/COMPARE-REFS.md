@@ -19,7 +19,7 @@
 |---|---|---|---|---|
 | 工作流数量 | 10 个（AIROHA/MTK/OWRT/QCA/QCB/WRT-CORE/WRT-TEST/Auto-Clean/Cache-Clean） | 6 个 | 3 个（QCA-ALL/WRT-CORE/WRT-TEST） | 10 个 + 自建 `ALEXWRT.yml` |
 | Config 数量 | 15 个（覆盖全平台） | 3 个（GENERAL/IPQ60XX-WIFI-YES/TEST） | 8 个 | 15 个（上游全部 + `IPQ60XX-OWRT-WIFI-YES`；原 `-OVERRIDES` 已并入该文件） |
-| `files/` 注入目录 | 无 | 无 | **有**（5 个文件） | **有**（`Files/RE-CS-02`，12 个文件） |
+| `files/` 注入目录 | 无 | 无 | **有**（5 个文件） | **有**（`../../Files/RE-CS-02`，12 个文件） |
 | WRT-CORE 版本 | 最新（含 cache-rollover 缓存滚动） | 最新 | **较旧**（去掉了 cache-rollover，`WRT_TEST` 还是 string） | 最新 + 3 个新输入 |
 | 上游源码 | 自己提供 | `577090447/immortalwrt` `main` | 同左 | `VIKINGYFY/immortalwrt` `owrt` |
 | 自动触发 | 每天（Auto-Clean → QCA-ALL 链式） | 同左 | 同左 | 自建的 `cron: 0 22 * * *` + 手动 |
@@ -28,13 +28,13 @@
 
 | 文件 | 改动量 | 内容 |
 |---|---|---|
-| `.github/workflows/ALEXWRT.yml` | 新增 | 雅典娜专用入口 |
-| `.github/workflows/WRT-CORE.yml` | +29 行 | 新增 `WRT_EXTRA_CONFIG`/`WRT_FILES`/`WRT_APPFILTER` 三个输入，新增 `Install Custom Files` 步骤，支持追加覆盖配置 |
-| `Scripts/Packages.sh` | +166 行 | 新增 `UPDATE_TOPLEVEL_PACKAGE`/`UPDATE_NESTED_PACKAGE` 两个函数 + 大量自建包 |
-| `Scripts/Settings.sh` | 9 行 | `WRT_WORD` 为空时改成开放 WiFi（上游无条件写密码） |
-| `Config/IPQ60XX-OWRT-WIFI-YES.txt` | 新增 | 只选 RE-CS-02 + 应用清单 + 板级覆盖（homeproxy/passwall2 =m、diskman、NSS）；原独立的 `-OVERRIDES.txt` 已于 11-08 并入 |
+| `../../.github/workflows/ALEXWRT.yml` | 新增 | 雅典娜专用入口 |
+| `../../.github/workflows/WRT-CORE.yml` | +29 行 | 新增 `WRT_EXTRA_CONFIG`/`WRT_FILES`/`WRT_APPFILTER` 三个输入，新增 `Install Custom Files` 步骤，支持追加覆盖配置 |
+| `../../Scripts/Packages.sh` | +166 行 | 新增 `UPDATE_TOPLEVEL_PACKAGE`/`UPDATE_NESTED_PACKAGE` 两个函数 + 大量自建包 |
+| `../../Scripts/Settings.sh` | 9 行 | `WRT_WORD` 为空时改成开放 WiFi（上游无条件写密码） |
+| `../../Config/IPQ60XX-OWRT-WIFI-YES.txt` | 新增 | 只选 RE-CS-02 + 应用清单 + 板级覆盖（homeproxy/passwall2 =m、diskman、NSS）；原独立的 `-OVERRIDES.txt` 已于 11-08 并入 |
 | `Files/RE-CS-02/**` | 新增 12 个 | uci-defaults 无线初始化 + NetBird 系列脚本 |
-| `Config/GENERAL.txt`、`Config/IPQ60XX-WIFI-YES.txt`、`QCA-ALL.yml`、`WRT-TEST.yml`、`Handles.sh` | **0 改动** | 与上游完全一致 |
+| `../../Config/GENERAL.txt`、`Config/IPQ60XX-WIFI-YES.txt`、`QCA-ALL.yml`、`WRT-TEST.yml`、`Handles.sh` | **0 改动** | 与上游完全一致 |
 
 ---
 
@@ -87,7 +87,7 @@ WiFi 这一行的实现差异值得注意：ax6600.emmc 是"静态覆盖"，好�
 
 ### 2.4 额外注入的内容
 
-`Files/RE-CS-02` 里的 7 个文件是另外三个仓库都没有的：
+`../../Files/RE-CS-02` 里的 7 个文件是另外三个仓库都没有的：
 
 - `etc/apk/repositories.d/customfeeds.list` —— 追加 NJU 镜像源（`distfeeds.list` 仍由 base-files 生成官方源）
 - `etc/init.d/netbird-passwall-compat-watch` —— 兼容守护服务（`watch` 模式才启用）
@@ -102,7 +102,7 @@ WiFi 这一行的实现差异值得注意：ax6600.emmc 是"静态覆盖"，好�
 
 ## 3. 为什么坑都集中在自建包这边
 
-上游固件里**没有 Docker、没有 vlmcsd、没有 OpenAppFilter、没有 NetBird**（577090447 两个仓库的 `Config/GENERAL.txt` 都显式选了 `docker`/`dockerd`/`luci-app-dockerman`，`ax6600.emmc` 还带 `docker-compose`，所以它有 Docker；但它除 Docker 之外没有 NAS 应用栈）。多引入的每一个自建包，都要自己保证它能过 `apk` 这一关：
+上游固件里**没有 Docker、没有 vlmcsd、没有 OpenAppFilter、没有 NetBird**（577090447 两个仓库的 `../../Config/GENERAL.txt` 都显式选了 `docker`/`dockerd`/`luci-app-dockerman`，`ax6600.emmc` 还带 `docker-compose`，所以它有 Docker；但它除 Docker 之外没有 NAS 应用栈）。多引入的每一个自建包，都要自己保证它能过 `apk` 这一关：
 
 | 已踩过的坑 | 现象 | 根因 |
 |---|---|---|
@@ -133,5 +133,5 @@ WiFi 这一行的实现差异值得注意：ax6600.emmc 是"静态覆盖"，好�
 - 删除：`AIROHA-ALL.yml`、`MTK-ALL.yml`、`OWRT-ALL.yml`、`QCA-ALL.yml`、`QCB-ALL.yml`、`WRT-TEST.yml`
 - 保留：`ALEXWRT.yml`（唯一编译入口）、`WRT-CORE.yml`（被调用的核心，自身无触发器）、`Auto-Clean.yml`（每天清理旧 Release 与旧运行记录）、`Cache-Clean.yml`（每周清理 ccache）
 
-`Config/` 下其它平台的配置文件暂时保留（不参与编译，不影响任何流程），需要时可以随时恢复对应工作流。
+`../../Config` 下其它平台的配置文件暂时保留（不参与编译，不影响任何流程），需要时可以随时恢复对应工作流。
 

@@ -42,7 +42,7 @@ WRT_APPFILTER: true
 
 ## 2. 通用工作流扩展
 
-文件：`.github/workflows/WRT-CORE.yml`
+文件：`../../.github/workflows/WRT-CORE.yml`
 
 新增三个输入参数：
 
@@ -134,7 +134,7 @@ key=88888888
 
 ## 5. 默认设置脚本的修改
 
-文件：`Scripts/Settings.sh`
+文件：`../../Scripts/Settings.sh`
 
 基线原来无条件替换 SSID 和密码：
 
@@ -157,7 +157,7 @@ fi
 
 ## 6. 软件包脚本的实际变化
 
-文件：`Scripts/Packages.sh`
+文件：`../../Scripts/Packages.sh`
 
 新增：
 
