@@ -1,3 +1,17 @@
+<!--
+luci-app-diskman 的磁盘 / RAID 分区条视图。本仓库在构建期整份覆盖上游同名文件
+（见 Scripts/Handles.sh 里的 FIX "diskman"），相对上游只有三处改动：
+
+  1. 分区条那行的 colspan 从写死的 15 改成实际列数（磁盘表 8 列、RAID 表 7 列）。
+     跨列数大于实际列数时浏览器会给表格补出空列：表头只占前几列、右边空一大片，
+     整张表还被撑到比窗口宽，容量 / 温度 / 分区表 / 健康几列直接跑到屏幕外。
+  2. 承载分区条的 td / div 加 overflow:hidden：自成块级格式化上下文，float 被包住、
+     高度也算进去（原来 DIV 分支用 position:absolute，会直接飞出容器）。
+  3. 每个分区段从 inline-block 改成 float:left + 省略号：inline-block 的文字会计入
+     表格的最小宽度，分区一多就把表格撑爆；float 不参与，标签太长就省略。
+
+上游更新这个文件时要重新核对这三点，别直接覆盖回来。
+-->
 <script type="text/javascript">
   window.onload = function () {
     //disk partition info
@@ -30,14 +44,8 @@
         // handle partitons info
         if (disk_info.partitions && disk_info.partitions.length > 0) {
           let partitons_div
-          // 跨列数取实际列数：原来写死 15，而磁盘表只有 8 列，浏览器会给表格
-          // 补出 7 个空列 —— 表头只占前 8 列、右边空一大片，整张表被撑到比窗口
-          // 还宽，容量/温度/分区表/健康这几列直接跑到屏幕外。
-          let ncol = (item.cells && item.cells.length) || 8
           if (item.nodeName == "TR") {
-            // overflow:hidden 让 td 自成一个块级格式化上下文：里面的 float 被包住，
-            // 高度也算进去（否则整行塌成 0）。原来的 position:absolute 会飞出去。
-            partitons_div = '<tr width="100%"><td style="margin:0px; padding:0px; border:0px; overflow:hidden;" colspan="' + ncol + '">'
+            partitons_div = '<tr width="100%"><td style="margin:0px; padding:0px; border:0px; overflow:hidden;" colspan="' + ((item.cells && item.cells.length) || 8) + '">'
           } else if (item.nodeName == "DIV") {
             partitons_div = '<div class="tr cbi-section-table-row cbi-rowstyle-1"><div style="overflow:hidden; width:100%">'
           }
@@ -61,9 +69,7 @@
             let p_color = p_colors[n++]
             if (n > 4) { n = 0 }
             let inline_txt = (part.name != '-' && part.name || '') + ' ' + (part.fs != 'Free Space' && part.fs || '') + ' ' + part.size_formated + ' ' + (part.useage != '-' && part.useage || '')
-            // float 而不是 inline-block：inline-block 的文字会算进表格的最小宽度，
-            // 分区多、标签长的时候整张表被撑爆；float 不参与最小宽度计算。
-            let partiton_div = '<div title="' + inline_txt + '" style="color:#525F7F; float:left; box-sizing:border-box; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; text-align:center; background-color:' + p_color + '; width:' + part_percent + '">' + inline_txt + '</div>'
+            let partiton_div = '<div title="' + inline_txt + '" style="color: #525F7F; float:left; box-sizing:border-box; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; text-align:center;background-color:' + p_color + '; width:' + part_percent + '">' + inline_txt + '</div>'
             partitons_div += partiton_div
           })
           if (item.nodeName == "TR") {
@@ -93,9 +99,9 @@
         // handle partitons info
         let partitons_div
         if (item.nodeName == "TR") {
-          partitons_div = '<tr width="100%" style="white-space:nowrap;"><td style="margin:0px; padding:0px; border:0px; white-space:nowrap;" colspan="15">'
+          partitons_div = '<tr width="100%"><td style="margin:0px; padding:0px; border:0px; overflow:hidden;" colspan="' + ((item.cells && item.cells.length) || 8) + '">'
         } else if (item.nodeName == "DIV") {
-          partitons_div = '<div class="tr cbi-section-table-row cbi-rowstyle-1"><div style="white-space:nowrap; position:absolute; width:100%">'
+          partitons_div = '<div class="tr cbi-section-table-row cbi-rowstyle-1"><div style="overflow:hidden; width:100%">'
         }
         let n = 0
         disk_info.partitions.forEach((part) => {
@@ -103,7 +109,7 @@
           let p_color = p_colors[n++]
           if (n > 4) { n = 0 }
           let inline_txt = (part.name != '-' && part.name || '') + ' ' + (part.fs != 'Free Space' && part.fs || '') + ' ' + part.size_formated + ' ' + (part.useage != '-' && part.useage || '')
-          let partiton_div = '<div title="' + inline_txt + '" style="display:inline-block; text-align:center;background-color:' + p_color + '; width:' + part_percent + '">' + inline_txt + '</div>'
+          let partiton_div = '<div title="' + inline_txt + '" style="float:left; box-sizing:border-box; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; text-align:center;background-color:' + p_color + '; width:' + part_percent + '">' + inline_txt + '</div>'
           partitons_div += partiton_div
         })
         if (item.nodeName == "TR") {
