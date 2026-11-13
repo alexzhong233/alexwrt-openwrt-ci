@@ -395,15 +395,12 @@ UPDATE_PACKAGE "mosdns" "sbwml/luci-app-mosdns" "v5" "" "v2dat"
 # 上游仍在 xiaodoudou/luci-app-uugamebooster，冲突时以那边为准重新对齐。
 UPDATE_PACKAGE "uugamebooster" "alexzhong233/luci-app-uugamebooster" "master" "pkg"
 UPDATE_PACKAGE "quickfile" "sbwml/luci-app-quickfile" "main"
-# OpenList 的 openlist2 不再进构建：Config 不选它，luci-app-hub 页面在运行时
-# 直接下作者的预编译包（releases 里的 openwrt-<sdk>-<arch>.tar.gz，解开是
-# openlist2 / luci-app-openlist2 / 中文翻译三个 apk，约 22MB），见 hub-ctl 的
-# ol2_fetch()。所以这里不需要 clone 源码 —— openlist2 本体是 Go 程序，只有
-# 编译期才用得上 Makefile。要回到预装就把下面几行加回来并在 Config 里选上：
-#   UPDATE_PACKAGE "openlist2" "sbwml/luci-app-openlist2" "main"
-#   CONFIG_PACKAGE_openlist2=y
-#   CONFIG_PACKAGE_luci-app-openlist2=y
-#   CONFIG_PACKAGE_luci-i18n-openlist2-zh-cn=y
+# OpenList 的 openlist2 预装进固件（用户要求：原生版挂本机数据比容器版省事）。
+# 源码来自 sbwml/luci-app-openlist2，仓库里同时有 openlist2 本体（Go 程序）和
+# luci-app-openlist2 页面，Config 里三个包都要显式选上。
+# 注意 luci-app-hub 的页面里还留着运行时下载的兜底（hub-ctl 的 ol2_fetch），
+# 用户手动卸掉之后可以在页面上重装，不用等下一次编译。
+UPDATE_PACKAGE "openlist2" "sbwml/luci-app-openlist2" "main"
 
 # 当前路由器使用的 SysTools 来自 LinkEase 应用扩展仓库。
 UPDATE_PACKAGE "systools" "linkease/openwrt-app-actions" "main" "pkg"
