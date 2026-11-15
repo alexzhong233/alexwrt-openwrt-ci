@@ -386,14 +386,15 @@ rm -rf ./package/packages/sing-box
 # 运行时从 apk 源装（官方版 / EE 版二选一）。
 UPDATE_PACKAGE "diskmanager" "4IceG/luci-app-mini-diskmanager" "main"
 UPDATE_PACKAGE "mosdns" "sbwml/luci-app-mosdns" "v5" "" "v2dat"
-# UU 走自建 fork（基于 xiaodoudou/luci-app-uugamebooster，每天自动合并上游）：
-#   · uu-passwall-sync：把「发往路由器本机的 udp/53」RETURN 顶在 UU 的
-#     DNAT 前面，并删掉它在 ip6tables filter 里那两条 udp/53 DROP。没有它，
-#     被加速设备绕过 passwall 的 DNS 链，且 UU 停止加速时不清那两条 DROP，
-#     设备的 IPv6 解析会一直坏到重启。
-#   · uu-state：注册记录 activate_status 原本写在 /var/tmp/uu（tmpfs），
-#     重启即丢，等于每次开机都要重新向网易注册。
-#   · 菜单从 admin/services 移到 admin/vpn。
+# UU 走自建 fork（基于 xiaodoudou/luci-app-uugamebooster，每天 03:23 UTC 自动合并上游）。
+# 2.4.1 之后共存引擎已被上游统一（uu-sync.d/*.sh），我们那份 uu-passwall-sync 已删，
+# 现在 fork 上只剩三处改动：
+#   · 菜单从 admin/services 移到 admin/vpn —— 控制器里的 entry、status 路由、以及
+#     uuplugin_status.htm 里的 url() 必须一起改，只改菜单会 404。
+#   · uu-detect 先读 $RUN_DIR/activate_status 再回退 /tmp/uu：上游只读后者，而我们的
+#     核心把文件写在前者，状态面板的「注册中」判断会一直拿不到值。
+#   · uu-sync 每轮 refresh 都 trim_uu_routes（上游只在启动剔一次）：UU 每次刷新会把
+#     公共 CDN 段重新塞回路由表，代理共存模式下国内 CDN 会被带进 UU 隧道。
 # 上游仍在 xiaodoudou/luci-app-uugamebooster，冲突时以那边为准重新对齐。
 UPDATE_PACKAGE "uugamebooster" "alexzhong233/luci-app-uugamebooster" "master" "pkg"
 UPDATE_PACKAGE "quickfile" "sbwml/luci-app-quickfile" "main"
