@@ -64,9 +64,15 @@ jobs:
           set -euo pipefail
           CUTOFF=$(date -u -d "$KEEP_DAYS days ago" +%Y-%m-%dT%H:%M:%SZ)
           echo "removing runs older than $CUTOFF"
+
+          # gh 的 --jq 只收一个裸 jq 表达式，不认 jq 自己的 --arg。
+          # 写成 `--jq --arg c "$CUTOFF" '...'` 时，pflag 会把 --arg 当成
+          # --jq 的值，剩下三个 token 变成多余的位置参数，gh 立刻退出 1
+          # —— 这一步自加进来起就没成功过（日志里 2 秒内失败就是这个）。
+          # 现在 gh 只负责吐 JSON，过滤交给真正的 jq。
           gh run list --repo "$GH_REPO" --limit 500 \
-              --json databaseId,createdAt \
-              --jq --arg c "$CUTOFF" '.[] | select(.createdAt < $c) | .databaseId' |
+              --json databaseId,createdAt |
+            jq -r --arg c "$CUTOFF" '.[] | select(.createdAt < $c) | .databaseId' |
             while read -r RUN_ID; do
               [ -n "$RUN_ID" ] || continue
               gh run delete "$RUN_ID" --repo "$GH_REPO" ||
