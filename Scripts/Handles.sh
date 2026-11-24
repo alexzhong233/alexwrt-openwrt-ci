@@ -61,7 +61,7 @@ FIX "theme-aurora" "$PACKAGE_PATH/luci-app-aurora-config" find \
 #     （默认 encryption='none'、key=''、country='CN'，必须强制改为 psk2+ccmp + 12345678）
 #
 #取值来自实机调试结果：
-#  radio1 2.4G  channel 5   HE40   （默认 20MHz 是被上游 width=20 写死的）
+#  radio1 2.4G  channel 5   HE20   （2.4G 固定 20MHz 更抗干扰）
 #  radio0 5G    channel 161 HE80   SoC 内置 2x2
 #  radio2 5G    channel 36  HE160  PCIe 外挂 4x4
 #国家码三个 radio 都是 US，默认加密 psk2+ccmp、密码 12345678。
@@ -99,7 +99,7 @@ if re.search(r"^[ \t]*let lower_band = lc\(band_name\);", src, re.M) and \
         f"{ind}if (lower_band == '2g') {{\n"
         f"{ind}\tband_suffix = '2.4g';\n"
         f"{ind}\tchannel = 5;\n"
-        f"{ind}\thtmode = 'HE40';\n"
+        f"{ind}\thtmode = 'HE20';\n"
         f"{ind}\tauto_htmode = null;\n"
         f"{ind}\tchannels = null;\n"
         f"{ind}}} else if (lower_band == '5g') {{\n"
@@ -144,7 +144,7 @@ elif "\t\tband_name = lc(band_name);\n" in src:
         "\t\tif (band_name == '2g') {\n"
         "\t\t\tband_suffix = '2.4g';\n"
         "\t\t\tchannel = 5;\n"
-        "\t\t\thtmode = 'HE40';\n"
+        "\t\t\thtmode = 'HE20';\n"
         "\t\t} else if (band_name == '5g') {\n"
         "\t\t\tif (pci) {\n"
         "\t\t\t\tband_suffix = '5.2g';\n"

@@ -135,3 +135,11 @@ CONFIG_PACKAGE_luci-app-vlmcsd=y
 # 覆盖 GENERAL.txt 的通用项：这两个在 GENERAL 里是 =y，雅典娜上改 =n 不编包不预装。
 CONFIG_PACKAGE_luci-app-homeproxy=n
 CONFIG_PACKAGE_luci-app-passwall2=n
+
+# 网络性能与内存保护：BBR 拥塞控制、IRQ 中断均衡、ZRAM 压缩交换分区
+CONFIG_PACKAGE_kmod-tcp-bbr=y
+CONFIG_PACKAGE_irqbalance=y
+CONFIG_PACKAGE_luci-app-irqbalance=y
+CONFIG_PACKAGE_luci-i18n-irqbalance-zh-cn=y
+CONFIG_PACKAGE_kmod-zram=y
+CONFIG_PACKAGE_zram-swap=y
