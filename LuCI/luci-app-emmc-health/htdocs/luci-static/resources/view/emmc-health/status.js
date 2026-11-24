@@ -36,9 +36,17 @@ var CSS = [
 	'.emmc-kpi-sub { font-size: 12px; opacity: .8; line-height: 1.5; margin-top: 6px; }',
 	'.emmc-section { border: 1px solid rgba(128,128,128,0.3); border-radius: 6px; padding: 10px 14px 14px; margin: 0 0 14px; background: rgba(128,128,128,0.05); }',
 	'.emmc-section h3 { margin: 4px 0 10px; font-size: 15px; }',
+	'.emmc-table-wrap { width: 100%; overflow-x: auto; -webkit-overflow-scrolling: touch; }',
 	'.emmc-table { width: 100%; border-collapse: collapse; }',
 	'.emmc-table th, .emmc-table td { padding: 6px 8px; border-bottom: 1px solid rgba(128,128,128,0.25); text-align: left; vertical-align: top; }',
-	'.emmc-table th { font-size: 12px; opacity: .8; }',
+	'.emmc-table th { font-size: 12px; opacity: .8; white-space: nowrap; }',
+	'.emmc-table td { overflow-wrap: anywhere; word-break: break-word; }',
+	'.emmc-col-nowrap { white-space: nowrap; }',
+	'.emmc-col-dev { min-width: 140px; }',
+	'.emmc-col-usage, .emmc-col-usage .cbi-value-description { min-width: 150px; white-space: nowrap; }',
+	'.emmc-col-flags { min-width: 220px; width: 42%; }',
+	'.emmc-flag-badge { font-weight: 600; }',
+	'.emmc-table .emmc-opts { margin-top: 4px; font-size: 12px; line-height: 1.5; opacity: .8; white-space: normal; word-break: break-word; overflow-wrap: anywhere; }',
 	'.emmc-banner { border: 1px solid #fb8c00; border-left-width: 4px; border-radius: 4px; background: rgba(251,140,0,0.12); padding: 10px 14px; margin: 0 0 16px; line-height: 1.6; }',
 	'.emmc-bar { height: 6px; width: 100%; background: rgba(128,128,128,0.25); border-radius: 3px; overflow: hidden; margin: 4px 0; }',
 	'.emmc-bar span { display: block; height: 100%; }',
@@ -282,22 +290,24 @@ function row(label, value, hint) {
 function renderDeviceSection(d) {
 	return E('div', { 'class': 'emmc-section' }, [
 		E('h3', {}, [ val(d.device) + ' · ' + val(d.vendor || 'Unknown') ]),
-		E('table', { 'class': 'table emmc-table' }, [
-			row('设备节点', E('code', {}, [ '/dev/' + val(d.device) ]), 'MMC bus: ' + val(d.bus_id)),
-			row('型号', val(d.name)),
-			row('厂商', val(d.vendor || 'Unknown')),
-			row('固件 / 硬件版本', val(d.fwrev) + ' / ' + val(d.hwrev)),
-			row('生产日期', val(d.date)),
-			row('序列号', val(d.serial)),
-			row('Manfid / OEM ID', val(d.manfid) + ' / ' + val(d.oemid)),
-			row('总容量', fmtBytes(d.size_bytes), 'EXT_CSD rev: ' + val(d.ext_csd_rev)),
-			row('Cache', val(d.cache_size), 'Cache ctrl: ' + val(d.cache_ctrl)),
-			row('TRIM', val(d.trim_mult)),
-			row('BKOPS', val(d.bkops_support), 'BKOPS EN: ' + val(d.bkops_en)),
-			row('Boot / RPMB', 'Boot: ' + val(d.boot_size_multi) + ' · RPMB: ' + val(d.rpmb_size_mult)),
-			row('读取', fmtBytes(d.read_bytes), val(d.read_ios) + ' 次 I/O'),
-			row('写入', fmtBytes(d.write_bytes), val(d.write_ios) + ' 次 I/O'),
-			row('Discard I/O', val(d.discard_ios))
+		E('div', { 'class': 'emmc-table-wrap' }, [
+			E('table', { 'class': 'table emmc-table' }, [
+				row('设备节点', E('code', {}, [ '/dev/' + val(d.device) ]), 'MMC bus: ' + val(d.bus_id)),
+				row('型号', val(d.name)),
+				row('厂商', val(d.vendor || 'Unknown')),
+				row('固件 / 硬件版本', val(d.fwrev) + ' / ' + val(d.hwrev)),
+				row('生产日期', val(d.date)),
+				row('序列号', val(d.serial)),
+				row('Manfid / OEM ID', val(d.manfid) + ' / ' + val(d.oemid)),
+				row('总容量', fmtBytes(d.size_bytes), 'EXT_CSD rev: ' + val(d.ext_csd_rev)),
+				row('Cache', val(d.cache_size), 'Cache ctrl: ' + val(d.cache_ctrl)),
+				row('TRIM', val(d.trim_mult)),
+				row('BKOPS', val(d.bkops_support), 'BKOPS EN: ' + val(d.bkops_en)),
+				row('Boot / RPMB', 'Boot: ' + val(d.boot_size_multi) + ' · RPMB: ' + val(d.rpmb_size_mult)),
+				row('读取', fmtBytes(d.read_bytes), val(d.read_ios) + ' 次 I/O'),
+				row('写入', fmtBytes(d.write_bytes), val(d.write_ios) + ' 次 I/O'),
+				row('Discard I/O', val(d.discard_ios))
+			])
 		])
 	]);
 }
@@ -352,15 +362,18 @@ function renderMountsSection(devices) {
 				pct = 0;
 		}
 		var cls = pct >= 90 ? 'emmc-bad' : (pct >= 80 ? 'emmc-warn' : 'emmc-good');
-		var flag = Number(m.noatime) === 1 || /(^|,|\s)noatime(,|\s|$)/.test(opts)
+		var isNoatime = Number(m.noatime) === 1 || /(^|,|\s)noatime(,|\s|$)/.test(opts);
+		var flag = isNoatime
 			? 'noatime'
 			: (/(^|,|\s)relatime(,|\s|$)/.test(opts) ? 'relatime' : '默认 (atime)');
+		var flagCls = isNoatime ? 'emmc-flag-badge emmc-good' : 'emmc-flag-badge emmc-warn';
+		var optsDisplay = opts ? opts.replace(/,\s*/g, ', ') : '';
 
 		return E('tr', {}, [
-			E('td', {}, [ E('code', {}, [ mp || '—' ]) ]),
-			E('td', {}, [ E('code', {}, [ dev || '—' ]) ]),
-			E('td', {}, [ fstype || '—' ]),
-			E('td', {}, [
+			E('td', { 'class': 'emmc-col-nowrap' }, [ E('code', {}, [ mp || '—' ]) ]),
+			E('td', { 'class': 'emmc-col-dev' }, [ E('code', {}, [ dev || '—' ]) ]),
+			E('td', { 'class': 'emmc-col-nowrap' }, [ fstype || '—' ]),
+			E('td', { 'class': 'emmc-col-usage' }, [
 				bar(pct, cls),
 				E('span', { 'class': cls }, [ pct + '%' ]),
 				E('div', { 'class': 'cbi-value-description' }, [
@@ -368,16 +381,18 @@ function renderMountsSection(devices) {
 					fmtBytes(isFinite(total) ? total * 1024 : null)
 				])
 			]),
-			E('td', {}, [
-				flag,
-				opts ? E('div', { 'class': 'cbi-value-description', 'title': opts }, [ opts ]) : ''
+			E('td', { 'class': 'emmc-col-flags' }, [
+				E('span', { 'class': flagCls }, [ flag ]),
+				optsDisplay ? E('div', { 'class': 'emmc-opts', 'title': opts }, [ optsDisplay ]) : ''
 			])
 		]);
 	});
 
 	return E('div', { 'class': 'emmc-section' }, [
 		E('h3', {}, [ '已挂载 eMMC 分区' ]),
-		E('table', { 'class': 'table emmc-table' }, [ head ].concat(body))
+		E('div', { 'class': 'emmc-table-wrap' }, [
+			E('table', { 'class': 'table emmc-table emmc-mounts-table' }, [ head ].concat(body))
+		])
 	]);
 }
 

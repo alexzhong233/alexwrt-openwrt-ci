@@ -220,14 +220,51 @@ for d in /sys/bus/mmc/devices/*; do
 	json_add_string "rpmb_size_mult" "$rpmb_size_mult"
 	json_add_string "raw_extcsd" "$raw_extcsd"
 
+	# Detect loop devices backed by this eMMC device (e.g. /dev/loop0 -> mmcblk0p18 for /overlay).
+	loop_map=""
+	for lf in /sys/block/loop*/loop/backing_file; do
+		[ -r "$lf" ] || continue
+		bfile=$(cat "$lf" 2>/dev/null)
+		case "$bfile" in
+			*"$blk"*)
+				ldir=${lf%/loop/backing_file}
+				ldev="/dev/$(basename "$ldir")"
+				bname=$(basename "$bfile")
+				loop_map="${loop_map}${ldev}=${bname} "
+				;;
+		esac
+	done
+
 	json_add_array "mounts"
-	mounts_list=$(awk -v dev="/dev/$blk" '
-		$1 == dev || index($1, dev "p") == 1 {
-			printf "%s\t%s\t%s\t%s\n", $1, $2, $3, $4
+	mounts_list=$(awk -v dev="/dev/$blk" -v lmap="$loop_map" '
+		BEGIN {
+			n = split(lmap, pairs, " ")
+			for (i = 1; i <= n; i++) {
+				eq = index(pairs[i], "=")
+				if (eq > 0) {
+					k = substr(pairs[i], 1, eq - 1)
+					v = substr(pairs[i], eq + 1)
+					lback[k] = v
+				}
+			}
+		}
+		{
+			matched = 0
+			disp = $1
+			if ($1 == dev || index($1, dev "p") == 1) {
+				matched = 1
+			} else if ($1 in lback) {
+				matched = 1
+				disp = $1 " (" lback[$1] ")"
+			}
+			if (matched && !seen[$1]++) {
+				printf "%s\t%s\t%s\t%s\n", disp, $2, $3, $4
+			}
 		}' /proc/mounts 2>/dev/null)
 
+	TAB=$(printf '\t')
 	# A here-doc keeps the loop in the current shell so jshn state survives.
-	while read -r mnt_dev mp fstype options; do
+	while IFS="$TAB" read -r mnt_dev mp fstype options; do
 		[ -n "$mp" ] || continue
 
 		df_fields=$(df -Pk "$mp" 2>/dev/null | awk 'NR == 2 { gsub(/%/, "", $5); print $2, $3, $4, $5 }')

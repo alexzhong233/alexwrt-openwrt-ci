@@ -31,4 +31,11 @@ if uci -q get pbuf.opt >/dev/null 2>&1; then
 	uci commit pbuf
 fi
 
+# 5. 禁用 haproxy 默认示例服务：PassWall 负载均衡只调用 /usr/sbin/haproxy 二进制，
+#    不依赖系统 init 服务；仅在 /etc/haproxy.cfg 仍为默认示例（含 my_http_proxy）时禁用，
+#    避免开机白占约 33 MB 内存及暴露 81/444/60000 示例端口，不影响用户自定义配置。
+if [ -x /etc/init.d/haproxy ] && [ -f /etc/haproxy.cfg ] && grep -q 'my_http_proxy' /etc/haproxy.cfg; then
+	/etc/init.d/haproxy disable 2>/dev/null || true
+fi
+
 exit 0
