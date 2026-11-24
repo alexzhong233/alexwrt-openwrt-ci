@@ -42,7 +42,7 @@
 
 | 频段 | 硬件 | 默认 SSID | 信道 | HT 模式 |
 |---|---|---|---|---|
-| 2.4 GHz | SoC 内置 ath11k | `alexwrt-jdcloud-2.4g` | 5 | HE40 |
+| 2.4 GHz | SoC 内置 ath11k | `alexwrt-jdcloud-2.4g` | 6 | HE20 |
 | 5.2 GHz | PCIe ath11k 4x4（DTS 里 `pci17cb,1104`） | `alexwrt-jdcloud-5.2g` | 36 | HE160 |
 | 5.8 GHz | SoC 内置 ath11k 2x2 | `alexwrt-jdcloud-5.8g` | 161 | HE80 |
 
@@ -55,7 +55,7 @@ set ${si}.key='${defaults?.key || (band_name == '6g' ? "" : "12345678")}'
 set ${s}.country='${country || "US"}'
 ```
 
-信道和 HT 模式是显式覆盖的：上游对 2G 固定 `width = 20`，对 5G 把 `max_width` 截到 80，所以 2.4G 的 HE40 和 PCIe 卡的 HE160 都必须在补丁里指定。频段后缀跟信道走——36 属 U-NII-1（5.2G），161 属 U-NII-3（5.8G）；PCIe 那块由 `match(phy.path, /pci/)` 识别，SoC 内置 phy 一个设备同时供 2.4G 和 5.8G 两个 band。
+信道和 HT 模式是显式覆盖的：2.4G 固定为标准非重叠信道 6 与 HE20（更抗干扰），而上游对 5G 把 `max_width` 截到 80，所以 PCIe 卡的 5.2G（信道 36）在补丁里显式指定为 HE160。频段后缀跟信道走——36 属 U-NII-1（5.2G），161 属 U-NII-3（5.8G）；PCIe 那块由 `match(phy.path, /pci/)` 识别，SoC 内置 phy 一个设备同时供 2.4G 和 5.8G 两个 band。
 
 **这个改动只影响“生成配置文件”那一刻。** `radio_exists()` 会跳过已经存在的 radio，所以保留配置升级时不会覆盖你改过的 SSID；只有全新刷机（或不保留配置）才会看到新默认值。当前值可以在路由器上 `uci show wireless | grep -E 'ssid|key'` 查。
 
@@ -69,7 +69,7 @@ set ${s}.country='${country || "US"}'
   收进 5 个服务页签——qBittorrent / OpenList / 1Panel / WorkBuddy2API / Magpie。
   qBittorrent 可选原生官方版、原生增强版（EE）、容器官方版、容器增强版；OpenList 可选
   feeds 版、openlist2、容器版；1Panel 和 WorkBuddy2API 各有本地/容器两套；Magpie 仅提供页签并在页面点击安装时拉取 Docker 镜像（`ghcr.io/yetone/magpie`）。数据目录优先挂 `/mnt/sda1`，切换运行方式不丢配置。
-  另内置 NetBird LuCI、FullConeNAT（OWRT 线带 `fullconenat-sonic`，LibWrt 线带 `kmod-nft-fullcone`）、RTP2HTTPD、软件包管理器、SysTools。
+  另内置 NetBird LuCI、FullConeNAT（OWRT 线带 `fullconenat-sonic`，LibWrt 线带 `kmod-nft-fullcone`）、RTP2HTTPD、软件包管理器、SysTools，以及自建 eMMC 寿命监控 `luci-app-emmc-health`（「状态 → 概览」卡片与「状态 → eMMC 寿命」详情页）。
 - NSS：
   - **OWRT 线**：`nss-firmware`、`kmod-nss-wifi-drv`、`ATH11K_NSS_WIFI` 来自上游；自建状态页 `luci-app-nss-status` 在「状态 -> NSS 卸载」，读 `nss-wifi-drv` 的 debugfs。
   - **LIBWRT 线**：`nss-firmware`、`kmod-qca-nss-drv`、`kmod-qca-nss-ecm` 与 `ATH11K_NSS_SUPPORT` 来自上游与 `nss_packages` feed；同样使用双后端自建状态页 `luci-app-nss-status` 查看核心负载与 ECM 加速流数，并配合 `luci-app-nssecm` 调整 ECM 加速引擎。
@@ -172,7 +172,7 @@ UU 加速某台设备时，会动两类规则来抢 DNS：
 
 **关键差别：UU 停止加速会清掉 `ip rule`、`tun163` 和 nat 规则，但不会清 ip6tables 里那两条 DROP。** 所以「用 UU 加速过一次」之后，这台设备的 IPv6 解析会一直失败到下次重启，而且没有任何提示——浏览器走 DoH 照常能开网页，只有系统解析和命令行工具受影响。
 
-这两件事现在由插件自己做。本仓库拉的是 [fork 版 `luci-app-uugamebooster`](https://github.com/alexzhong233/luci-app-uugamebooster)（见 `Scripts/Packages.sh` 的 `UPDATE_PACKAGE`），菜单已移至「**VPN → UU 加速器**」，内置共存引擎（`uu-sync.d/*.sh` 处理 OpenClash / Nikki / HomeProxy / UA3F，`uu-passwall-sync` 处理 PassWall）：`/etc/init.d/uuplugin` 在 `passwall_mode=cooperative`（默认）且 `/etc/config/passwall` 存在时启动它，每 `passwall_interval`（默认 5 秒）把「发往路由器自己的 UDP/53」的 `RETURN` 顶回 `nat PREROUTING` 第 1 位，并删掉 `ip6tables filter` 里那两条 DROP。
+这两件事现在由插件自己做。本仓库拉的是 [fork 版 `luci-app-uugamebooster`](https://github.com/alexzhong233/luci-app-uugamebooster)（见 `Scripts/Packages.sh` 的 `UPDATE_PACKAGE`），菜单已移至「**VPN → UU 加速器**」，内置共存引擎（2.4.1 起已将各代理共存逻辑统一收进 `uu-sync.d/*.sh`，涵盖 PassWall / OpenClash / Nikki / HomeProxy / UA3F，原独立脚本 `uu-passwall-sync` 已删除）：`/etc/init.d/uuplugin` 在 `passwall_mode=cooperative`（默认）且 `/etc/config/passwall` 存在时启动它，每 `passwall_interval`（默认 5 秒）把「发往路由器自己的 UDP/53」的 `RETURN` 顶回 `nat PREROUTING` 第 1 位，并删掉 `ip6tables filter` 里那两条 DROP。
 
 几个与旧脚本不同的地方：
 

@@ -1,6 +1,7 @@
 # 统一 LF：注入固件的脚本会被路由器直接执行，CRLF 会让 shebang 失效
 *.txt text eol=lf
 *.sh text eol=lf
+*.mk text eol=lf
 *.list text eol=lf
 *.yml text eol=lf
 *.md text eol=lf
@@ -17,6 +18,7 @@ Files/**/etc/init.d/* text eol=lf
 Files/**/etc/uci-defaults/* text eol=lf
 Files/**/etc/config/* text eol=lf
 Files/**/etc/apk/repositories.d/* text eol=lf
+Files/**/etc/sysctl.d/* text eol=lf
 Files/**/etc/crontabs/* text eol=lf
 Files/**/usr/bin/* text eol=lf
 Files/**/usr/sbin/* text eol=lf

@@ -258,10 +258,10 @@ UPDATE_TOPLEVEL_PACKAGE "luci-app-netbird-tools" "alexzhong233/luci-app-netbird-
 # 服务合集（luci-app-hub）：qBittorrent / OpenList / 1Panel / WorkBuddy2API / Magpie
 # Magpie 是 Docker 镜像（ghcr.io/yetone/magpie），没有 OpenWrt 包，不进固件；
 # 固件里带的是 hub 的页面与 hub-ctl，镜像在页面上点「安装」时才拉。
-# 四个服务收进一个页面，页签切换。这里合并了原来独立的 luci-app-1panel 与
+# 五个服务收进一个页面，页签切换。这里合并了原来独立的 luci-app-1panel 与
 # luci-app-workbuddy2api —— 那两个仓库仍可单独安装，但固件只引入这一个，
-# 避免同一套 ctl 装两遍、菜单重复。qBittorrent / OpenList 由页面按需 apk
-# 安装，固件不再预装本体。
+# 避免同一套 ctl 装两遍、菜单重复。qBittorrent 由页面按需安装，openlist2 原生版
+# 在下方单独预装进固件。
 UPDATE_TOPLEVEL_PACKAGE "luci-app-hub" "alexzhong233/luci-app-hub" "main"
 
 # 订阅转换（alexwrt-subgen）：Go 服务 + LuCI 控制台 + rpcd 插件。

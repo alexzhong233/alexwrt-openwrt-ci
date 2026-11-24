@@ -11,12 +11,12 @@ find ./feeds/luci/modules/luci-mod-system/ -type f -name "flash.js" -exec sed -i
 #添加编译日期标识
 find ./feeds/luci/modules/luci-mod-status/ -type f -name "10_system.js" -exec sed -i "s/(\(luciversion || ''\))/(\1) + (' \/ $WRT_MARK-$WRT_DATE')/g" {} +
 
-#无线不做任何定制
-# SSID 和密码完全交给上游的 mac80211 生成规则：首次启动时 /sbin/wifi config
-# 按硬件生成 /etc/config/wireless，SSID 取上游默认值，密钥随机生成。
-# 这里以前有一份 Files/RE-CS-02/etc/uci-defaults/99-alexwrt-wireless 去改
-# SSID/密码，但它返回 1 时会被 uci_apply_defaults 留在原地重试，重试成功就会
-# 覆盖用户在 LuCI 里改过的配置（表现为每次重启无线设置被重置），已删除。
+#无线默认配置定制
+# SSID / 国家码 / 加密 / 信道由 Scripts/Handles.sh 在构建期直接打补丁写入
+# /lib/wifi/mac80211.uc 的兜底默认值：仅在首次启动 /sbin/wifi config 生成
+# /etc/config/wireless 时生效，保留配置升级不覆盖用户已有设置。
+# （此前采用 Files/RE-CS-02/etc/uci-defaults/99-alexwrt-wireless 运行时覆盖，
+# 会因重试机制在每次重启重置用户在 LuCI 改过的无线设置，已删除。）
 
 CFG_FILE="./package/base-files/files/bin/config_generate"
 #修改默认IP地址

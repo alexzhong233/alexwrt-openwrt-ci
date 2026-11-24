@@ -49,9 +49,6 @@ jobs:
       # 577090447/main 那套是 qca-nss-drv + ecm 的完整数据平面，卸载的是有线转发；
       # 它没有 wifili，WiFi 的包进 NSS 后只能走 exception 退回 CPU，所以状态页虽然
       # 有计数，无线本身并没有加速。此外它会去掉 qca-ppe-qos 和 luci-app-router-tool。
-      #
-      # 这套上游是 WiFi 与有线都走软转发的常规方案，普通家用负载下 CPU 足够，
-      # 故选 owrt。
       WRT_REPO: https://github.com/VIKINGYFY/immortalwrt.git
       WRT_BRANCH: owrt
       WRT_SOURCE: VIKINGYFY/immortalwrt

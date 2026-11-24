@@ -1,11 +1,13 @@
 #!/bin/sh
 # 首次启动 / 刷机后一次性调优（必须 exit 0，避免重复覆盖用户设置）
 
-# 1. 启用 irqbalance 分散高负载 Wi-Fi/NSS 中断
+# 1. 禁用 irqbalance：IPQ6018 为 ARM GIC-400，irqbalance 会把亲和性重置为 0-3
+#    导致中断堆死在 CPU0（LibWrt 还会破坏 qca-nss-drv 的静态多核绑定）。
+#    两线均不再安装该包，此处保留禁用逻辑用于兜底保留配置升级的旧环境。
 if uci -q get irqbalance.irqbalance >/dev/null 2>&1; then
-	uci set irqbalance.irqbalance.enabled='1'
+	uci set irqbalance.irqbalance.enabled='0'
 	uci commit irqbalance
-	/etc/init.d/irqbalance enable 2>/dev/null || true
+	/etc/init.d/irqbalance disable 2>/dev/null || true
 fi
 
 # 2. ZRAM 交换分区默认上限 512 MB（已有用户设置时不覆盖）
@@ -20,6 +22,13 @@ if [ -f /etc/init.d/qca-nss-ecm ]; then
 	uci set firewall.@defaults[0].flow_offloading='0'
 	uci set firewall.@defaults[0].flow_offloading_hw='0'
 	uci commit firewall
+fi
+
+# 4. LibWrt 的 qca-nss-pbuf 默认把 CPU 调频策略锁死在 performance，覆盖 cpufreq 的
+#    schedutil 导致待机全核满频发热；统一对齐为 schedutil。
+if uci -q get pbuf.opt >/dev/null 2>&1; then
+	uci set pbuf.opt.scaling_governor='schedutil'
+	uci commit pbuf
 fi
 
 exit 0

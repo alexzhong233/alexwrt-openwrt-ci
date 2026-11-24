@@ -209,7 +209,7 @@ jobs:
 
       - name: Check Scripts
         run: |
-          find ./ -maxdepth 3 -type f -iregex ".*\(txt\|sh\)$" -exec dos2unix {} \; -exec chmod +x {} \;
+          find ./ -maxdepth 3 -type f -iregex ".*\(txt\|sh\|mk\)$" -exec dos2unix {} \; -exec chmod +x {} \;
 
       - name: Restore Build Cache
         id: cache-restore
@@ -381,6 +381,10 @@ jobs:
           SELF_PKGS=$(grep -oE '^UPDATE_(PACKAGE|TOPLEVEL_PACKAGE|NESTED_PACKAGE) "[^"]+"' \
             "$GITHUB_WORKSPACE/Scripts/Packages.sh" |
             sed -E 's/^[A-Z_]+ "([^"]+)"$/\1/')
+          if [ -d "$GITHUB_WORKSPACE/LuCI" ]; then
+            LOCAL_LUCI_PKGS=$(find "$GITHUB_WORKSPACE/LuCI" -mindepth 1 -maxdepth 1 -type d -exec basename {} \;)
+            SELF_PKGS=$(printf '%s\n%s\n' "$SELF_PKGS" "$LOCAL_LUCI_PKGS" | grep -v '^$')
+          fi
 
           IGNORE_FILE="$GITHUB_WORKSPACE/Config/verify-ignore.txt"
 
@@ -675,7 +679,7 @@ jobs:
             WIFI密码：12345678
 
             出厂无线预设（国家码 US，仅对全新刷机生效；升级时保留配置则不覆盖已有设置）：
-            - 2.4G　信道 5　　HE40
+            - 2.4G　信道 6　　HE20
             - 5.2G　信道 36　 HE160（PCIe 4×4，首次启动需等 60 秒 CAC）
             - 5.8G　信道 161  HE80 （SoC 内置 2×2）
 

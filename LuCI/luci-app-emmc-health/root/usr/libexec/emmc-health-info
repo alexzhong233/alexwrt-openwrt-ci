@@ -1,0 +1,264 @@
+#!/bin/sh
+# SPDX-License-Identifier: MIT
+#
+# eMMC health / lifetime information collector for LuCI.
+#
+# Outputs a single JSON object on stdout:
+#   { "timestamp": <epoch int>, "uptime_sec": <int>, "devices": [ ... ] }
+#
+# POSIX /bin/sh, compatible with OpenWrt BusyBox ash.
+# NOTE: every byte-count multiplication is delegated to awk.  BusyBox ash
+# performs 32-bit arithmetic in $(( )) and would silently overflow on sizes
+# larger than 2 GiB.
+
+. /usr/share/libubox/jshn.sh
+
+# Read a sysfs attribute; print nothing if it is missing or unreadable.
+sysfs_read() {
+	[ -r "$1" ] || return 0
+	cat "$1" 2>/dev/null
+}
+
+# Normalise a manfid (e.g. 0x000002, 0x2c) and map it to a vendor name.
+# Leading zeros and the 0x prefix are ignored, matching is lower case.
+vendor_from_manfid() {
+	fid="$1"
+	norm=$(printf '%s\n' "$fid" | awk '{
+		v = tolower($0)
+		sub(/^0x/, "", v)
+		sub(/^0+/, "", v)
+		if (v == "") v = "0"
+		if (length(v) == 1) v = "0" v
+		print v
+	}')
+
+	case "$norm" in
+		02|45)    printf '%s\n' 'SanDisk / WD' ;;
+		11)       printf '%s\n' 'Toshiba / Kioxia' ;;
+		13|2c|fe) printf '%s\n' 'Micron' ;;
+		15)       printf '%s\n' 'Samsung' ;;
+		70)       printf '%s\n' 'Kingston' ;;
+		88|d6)    printf '%s\n' 'Foresee / Longsys' ;;
+		90)       printf '%s\n' 'SK Hynix' ;;
+		4e)       printf '%s\n' 'YMTC' ;;
+		*)        printf '%s\n' "Unknown ($fid)" ;;
+	esac
+}
+
+# Extract a register value from the cached `mmc extcsd read` text.
+# Handles `[KEY: val]`, `[KEY]: val`, and `[KEY] is val`.
+extcsd_get() {
+	printf '%s\n' "$EXT_CSD_TEXT" | awk -v r="$1" '
+		{
+			p = index($0, "[" r ":")
+			if (p > 0) {
+				v = substr($0, p + length(r) + 2)
+				sub(/\].*$/, "", v)
+			} else {
+				p = index($0, "[" r "]")
+				if (p > 0) {
+					v = substr($0, p + length(r) + 2)
+					sub(/^[[:space:]]*(:|is)[[:space:]]*/, "", v)
+				} else {
+					next
+				}
+			}
+			sub(/^[[:space:]]+/, "", v)
+			sub(/[[:space:]]+$/, "", v)
+			print v
+			exit
+		}'
+}
+
+json_init
+
+timestamp=$(date +%s)
+uptime_sec=$(awk '{ printf "%d", $1 }' /proc/uptime 2>/dev/null)
+
+json_add_int "timestamp" "$timestamp"
+json_add_int "uptime_sec" "$uptime_sec"
+json_add_array "devices"
+
+for d in /sys/bus/mmc/devices/*; do
+	[ -d "$d" ] || continue
+	[ "$(sysfs_read "$d/type")" = "MMC" ] || continue
+
+	# Pick the whole-disk block device, skipping boot / RPMB / partitions.
+	blk=""
+	for b in "$d"/block/*; do
+		[ -e "$b" ] || continue
+		bname=$(basename "$b")
+		case "$bname" in
+			mmcblk[0-9]*)
+				case "$bname" in
+					*boot*|*rpmb*|*p[0-9]*) continue ;;
+				esac
+				blk="$bname"
+				break
+				;;
+		esac
+	done
+	[ -n "$blk" ] || continue
+
+	bus_id=$(basename "$d")
+	card_name=$(sysfs_read "$d/name")
+	manfid=$(sysfs_read "$d/manfid")
+	oemid=$(sysfs_read "$d/oemid")
+	serial=$(sysfs_read "$d/serial")
+	card_date=$(sysfs_read "$d/date")
+	hwrev=$(sysfs_read "$d/hwrev")
+	fwrev=$(sysfs_read "$d/fwrev")
+	vendor=$(vendor_from_manfid "$manfid")
+
+	life_a=""
+	life_b=""
+	pre_eol=""
+	if [ -r "$d/life_time" ]; then
+		set -- $(sysfs_read "$d/life_time")
+		life_a="$1"
+		life_b="$2"
+	fi
+	[ -r "$d/pre_eol_info" ] && pre_eol=$(sysfs_read "$d/pre_eol_info")
+
+	# Byte counts must go through awk; see the note at the top of this file.
+	size_bytes=$(awk '{ printf "%.0f", $1 * 512 }' "/sys/block/$blk/size" 2>/dev/null)
+	[ -n "$size_bytes" ] || size_bytes="0"
+
+	read_ios=0
+	read_bytes=0
+	write_ios=0
+	write_bytes=0
+	discard_ios=0
+	if [ -r "/sys/block/$blk/stat" ]; then
+		stats=$(awk '{ printf "%s %.0f %s %.0f %d\n", $1, $3 * 512, $5, $7 * 512, $12 + 0 }' "/sys/block/$blk/stat")
+		set -- $stats
+		read_ios=$1
+		read_bytes=$2
+		write_ios=$3
+		write_bytes=$4
+		discard_ios=$5
+	fi
+
+	# Query the card's Extended CSD once and reuse the cached text.
+	EXT_CSD_TEXT=""
+	ext_csd_rev=""
+	cache_size=""
+	cache_ctrl=""
+	bkops_support=""
+	bkops_en=""
+	trim_mult=""
+	boot_size_multi=""
+	rpmb_size_mult=""
+	raw_extcsd=""
+
+	if command -v mmc >/dev/null 2>&1 && [ -e "/dev/$blk" ]; then
+		EXT_CSD_TEXT=$(mmc extcsd read "/dev/$blk" 2>/dev/null)
+	fi
+
+	if [ -n "$EXT_CSD_TEXT" ]; then
+		ext_csd_rev=$(printf '%s\n' "$EXT_CSD_TEXT" | awk '
+			/Extended CSD rev/ {
+				v = $0
+				sub(/^.*Extended CSD rev[[:space:]]*/, "", v)
+				sub(/[[:space:]]+is supported.*$/, "", v)
+				print v
+				exit
+			}')
+		cache_size=$(extcsd_get "CACHE_SIZE")
+		cache_ctrl=$(extcsd_get "CACHE_CTRL")
+		bkops_support=$(extcsd_get "BKOPS_SUPPORT")
+		bkops_en=$(extcsd_get "BKOPS_EN")
+		trim_mult=$(extcsd_get "TRIM_MULT")
+		boot_size_multi=$(extcsd_get "BOOT_SIZE_MULTI")
+		rpmb_size_mult=$(extcsd_get "RPMB_SIZE_MULT")
+
+		# Fall back to EXT_CSD when the sysfs attributes are absent.
+		[ -n "$life_a" ] || life_a=$(extcsd_get "EXT_CSD_DEVICE_LIFE_TIME_EST_TYP_A")
+		[ -n "$life_a" ] || life_a=$(extcsd_get "DEVICE_LIFE_TIME_EST_TYP_A")
+		[ -n "$life_b" ] || life_b=$(extcsd_get "EXT_CSD_DEVICE_LIFE_TIME_EST_TYP_B")
+		[ -n "$life_b" ] || life_b=$(extcsd_get "DEVICE_LIFE_TIME_EST_TYP_B")
+		[ -n "$pre_eol" ] || pre_eol=$(extcsd_get "EXT_CSD_PRE_EOL_INFO")
+		[ -n "$pre_eol" ] || pre_eol=$(extcsd_get "PRE_EOL_INFO")
+
+		raw_extcsd=$(printf '%s\n' "$EXT_CSD_TEXT" | awk '
+			/Extended CSD rev|LIFE_TIME|PRE_EOL|CACHE|BKOPS|TRIM|SEC_COUNT|BOOT_SIZE|RPMB_SIZE/ {
+				print
+				++n
+				if (n >= 40) exit
+			}')
+	fi
+
+	json_add_object
+	json_add_string "device" "$blk"
+	json_add_string "bus_id" "$bus_id"
+	json_add_string "name" "$card_name"
+	json_add_string "manfid" "$manfid"
+	json_add_string "oemid" "$oemid"
+	json_add_string "serial" "$serial"
+	json_add_string "date" "$card_date"
+	json_add_string "hwrev" "$hwrev"
+	json_add_string "fwrev" "$fwrev"
+	json_add_string "vendor" "$vendor"
+	# Large byte counts are stored as exact decimal strings; the front end
+	# parses them with Number(...).
+	json_add_string "size_bytes" "$size_bytes"
+	json_add_string "life_a" "$life_a"
+	json_add_string "life_b" "$life_b"
+	json_add_string "pre_eol" "$pre_eol"
+	json_add_int "read_ios" "$read_ios"
+	json_add_string "read_bytes" "$read_bytes"
+	json_add_int "write_ios" "$write_ios"
+	json_add_string "write_bytes" "$write_bytes"
+	json_add_int "discard_ios" "$discard_ios"
+	json_add_string "ext_csd_rev" "$ext_csd_rev"
+	json_add_string "cache_size" "$cache_size"
+	json_add_string "cache_ctrl" "$cache_ctrl"
+	json_add_string "bkops_support" "$bkops_support"
+	json_add_string "bkops_en" "$bkops_en"
+	json_add_string "trim_mult" "$trim_mult"
+	json_add_string "boot_size_multi" "$boot_size_multi"
+	json_add_string "rpmb_size_mult" "$rpmb_size_mult"
+	json_add_string "raw_extcsd" "$raw_extcsd"
+
+	json_add_array "mounts"
+	mounts_list=$(awk -v dev="/dev/$blk" '
+		$1 == dev || index($1, dev "p") == 1 {
+			printf "%s\t%s\t%s\t%s\n", $1, $2, $3, $4
+		}' /proc/mounts 2>/dev/null)
+
+	# A here-doc keeps the loop in the current shell so jshn state survives.
+	while read -r mnt_dev mp fstype options; do
+		[ -n "$mp" ] || continue
+
+		df_fields=$(df -Pk "$mp" 2>/dev/null | awk 'NR == 2 { gsub(/%/, "", $5); print $2, $3, $4, $5 }')
+		set -- $df_fields
+		total_kb=${1:-0}
+		used_kb=${2:-0}
+		avail_kb=${3:-0}
+		use_pct=${4:-0}
+
+		case ",$options," in
+			*,noatime,*) noatime=1 ;;
+			*)           noatime=0 ;;
+		esac
+
+		json_add_object
+		json_add_string "mountpoint" "$mp"
+		json_add_string "device" "$mnt_dev"
+		json_add_string "fstype" "$fstype"
+		json_add_string "options" "$options"
+		json_add_string "total_kb" "$total_kb"
+		json_add_string "used_kb" "$used_kb"
+		json_add_string "avail_kb" "$avail_kb"
+		json_add_int "use_pct" "$use_pct"
+		json_add_boolean "noatime" "$noatime"
+		json_close_object
+	done <<EOF
+$mounts_list
+EOF
+	json_close_array
+	json_close_object
+done
+
+json_close_array
+json_dump
