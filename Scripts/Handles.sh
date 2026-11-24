@@ -51,30 +51,24 @@ FIX "theme-aurora" "$PACKAGE_PATH/luci-app-aurora-config" find \
 	"$PACKAGE_PATH/luci-app-aurora-config/root/usr/share/aurora/" -type f -name '*.template' -exec sed -i \
 	"s/nav_type '.*'/nav_type 'dropdown'/g; s/struct_radius_base '.*'/struct_radius_base '0.125rem'/g" {} +
 
-#修改vantage进度条标签字体（anothaDev/luci-theme-vantage#52）
-FIX "theme-vantage" "$PACKAGE_PATH/luci-theme-vantage" sed -i \
-	-e '/^\/\* progress bars: thin track/,$ { /^\.cbi-progressbar::before {/,/^}/ { s/^[[:space:]]*font: 500 var(--fs-micro)\/1\.2 var(--mono);/\tfont: inherit; line-height: normal;/; } }' \
-	"$PACKAGE_PATH/luci-theme-vantage/luci-theme-vantage/htdocs/luci-static/vantage/vantage.css"
-
-#无线默认 SSID
+#无线默认 SSID / 国家码 / 加密 / 信道
 #
 #首次启动由 /sbin/wifi config 调 ucode /lib/wifi/mac80211.uc 生成
-#/etc/config/wireless，SSID / 加密 / 密码是写死的兜底：
-#  set ${si}.ssid='${defaults?.ssid || 'OWRT'}'
-#  set ${si}.encryption='${defaults?.encryption || 'psk2+ccmp'}'
-#  set ${si}.key='${defaults?.key || '12345678'}'
-#这里替换 SSID 兜底值、国家码、信道和 HT 模式，加密与密码保持上游默认。
+#/etc/config/wireless。各家上游脚本写法已分叉，但本脚本同时兼容两套布局：
+#  1) VIKINGYFY/immortalwrt@owrt：用 uci.cursor() + set_section(...) 写配置
+#     （带 let lower_band = lc(band_name) 与 maximum_channel_plan）
+#  2) LiBwrt/LibWrt@25.12-nss：用 print("set ${s}...") 输出 uci batch
+#     （默认 encryption='none'、key=''、country='CN'，必须强制改为 psk2+ccmp + 12345678）
 #
 #取值来自实机调试结果：
 #  radio1 2.4G  channel 5   HE40   （默认 20MHz 是被上游 width=20 写死的）
 #  radio0 5G    channel 161 HE80   SoC 内置 2x2
 #  radio2 5G    channel 36  HE160  PCIe 外挂 4x4
-#国家码三个 radio 都是 US，不是上游兜底的 CN。
+#国家码三个 radio 都是 US，默认加密 psk2+ccmp、密码 12345678。
 #
 #频段后缀跟着信道走：36 属 U-NII-1（5.2G），161 属 U-NII-3（5.8G）。PCIe 那块
 #接在 DTS 的 &pcie0（pci17cb,1104），path 里带 pci，跑的是 36 所以叫 5.2g；
-#SoC 内置 phy 同时供 2.4G 和 5.8G 两个 band。判据放在 band_name 转小写之后，
-#此时它已是 2g / 5g。
+#SoC 内置 phy 同时供 2.4G 和 5.8G 两个 band。
 #
 #铁律：这只改「默认值」，只在生成配置文件时生效。radio_exists() 会跳过已存在
 #的 radio，所以保留配置升级时用户自己改过的 SSID 不会被覆盖。当初删掉
@@ -94,56 +88,118 @@ src = io.open(path, encoding="utf-8").read()
 if "band_suffix" in src:
     sys.exit(0)
 
-anchor = "\t\tband_name = lc(band_name);\n"
-if anchor not in src:
-    sys.exit("mac80211.uc: band_name anchor not found")
+if re.search(r"^[ \t]*let lower_band = lc\(band_name\);", src, re.M) and \
+   re.search(r"^([ \t]*)set_section\(name, 'wifi-device', \{\n", src, re.M):
+    # Branch A: 新版 uci.cursor() + set_section(...) 布局（VIKINGYFY/immortalwrt）
+    m_sec = re.search(r"^([ \t]*)set_section\(name, 'wifi-device', \{\n", src, re.M)
+    ind = m_sec.group(1)
+    inject = (
+        f"{ind}let pci = (match(phy.path, /pci/) != null);\n"
+        f"{ind}let band_suffix = lower_band;\n"
+        f"{ind}if (lower_band == '2g') {{\n"
+        f"{ind}\tband_suffix = '2.4g';\n"
+        f"{ind}\tchannel = 5;\n"
+        f"{ind}\thtmode = 'HE40';\n"
+        f"{ind}\tauto_htmode = null;\n"
+        f"{ind}\tchannels = null;\n"
+        f"{ind}}} else if (lower_band == '5g') {{\n"
+        f"{ind}\tif (pci) {{\n"
+        f"{ind}\t\tband_suffix = '5.2g';\n"
+        f"{ind}\t\tchannel = 36;\n"
+        f"{ind}\t\thtmode = 'HE160';\n"
+        f"{ind}\t}} else {{\n"
+        f"{ind}\t\tband_suffix = '5.8g';\n"
+        f"{ind}\t\tchannel = 161;\n"
+        f"{ind}\t\thtmode = 'HE80';\n"
+        f"{ind}\t}}\n"
+        f"{ind}\tauto_htmode = null;\n"
+        f"{ind}\tchannels = null;\n"
+        f"{ind}}}\n"
+    )
+    src = src[:m_sec.start()] + inject + src[m_sec.start():]
 
-inject = (
-    "\n\t\tlet pci = (match(phy.path, /pci/) != null);\n"
-    "\t\tlet band_suffix = band_name;\n"
-    "\t\tif (band_name == '2g') {\n"
-    "\t\t\tband_suffix = '2.4g';\n"
-    "\t\t\tchannel = 5;\n"
-    "\t\t\thtmode = 'HE40';\n"
-    "\t\t} else if (band_name == '5g') {\n"
-    "\t\t\tif (pci) {\n"
-    "\t\t\t\tband_suffix = '5.2g';\n"
-    "\t\t\t\tchannel = 36;\n"
-    "\t\t\t\thtmode = 'HE160';\n"
-    "\t\t\t} else {\n"
-    "\t\t\t\tband_suffix = '5.8g';\n"
-    "\t\t\t\tchannel = 161;\n"
-    "\t\t\t\thtmode = 'HE80';\n"
-    "\t\t\t}\n"
-    "\t\t}\n"
-)
-src = src.replace(anchor, anchor + inject, 1)
+    pat_country = re.compile(r"(configured_country \|\| )(['\"])[^'\"]*\2")
+    if not pat_country.search(src):
+        sys.exit("mac80211.uc: configured_country fallback not found")
+    src = pat_country.sub(r"\1'US'", src, count=1)
 
-# 兜底值不能按字面串匹配：各家上游这两行写法不一样。
-#   · 引号：VIKINGYFY 写 'OWRT'（单引号），LibWrt 写 "LibWrt"（双引号）；
-#   · 默认值：VIKINGYFY 是 OWRT，LibWrt 直接换成自己的名字。
-# 所以按「标识符 + 引号 + 任意值」匹配，替换时沿用原来的引号字符，
-# 这样换上游不用改脚本，也不会因为一个引号让整个构建挂掉。
-pat = re.compile(r"(\$\{defaults\?\.ssid \|\| )(['\"])([^'\"]*)\2")
-if not pat.search(src):
-    sys.exit("mac80211.uc: ssid fallback not found")
+    pat_ssid = re.compile(r"^([ \t]*ssid:\s*defaults\?\.ssid \|\| )([^\n]+)$", re.M)
+    m_ssid = pat_ssid.search(src)
+    if not m_ssid:
+        sys.exit("mac80211.uc: wifi-iface ssid not found")
+    trailing = "," if m_ssid.group(2).rstrip().endswith(",") else ""
+    src = pat_ssid.sub(lambda m: m.group(1) + "('alexwrt-jdcloud-' + band_suffix)" + trailing, src, count=1)
 
-src = pat.sub(
-    lambda m: m.group(1) + m.group(2) + "alexwrt-jdcloud-" + m.group(2) + " + band_suffix",
-    src, count=1)
+    if not re.search(r"encryption:[^\n]*psk2\+ccmp", src):
+        sys.exit("mac80211.uc: psk2+ccmp default missing in wifi-iface")
+    if not re.search(r"key:[^\n]*12345678", src):
+        sys.exit("mac80211.uc: 12345678 key default missing in wifi-iface")
 
-pat = re.compile(r"(\$\{country \|\| )(['\"])([^'\"]*)\2")
-if not pat.search(src):
-    sys.exit("mac80211.uc: country fallback not found")
+elif "\t\tband_name = lc(band_name);\n" in src:
+    # Branch B: 传统 print("set ...") 布局（LibWrt 25.12-nss 等）
+    anchor = "\t\tband_name = lc(band_name);\n"
+    inject = (
+        "\n\t\tlet pci = (match(phy.path, /pci/) != null);\n"
+        "\t\tlet band_suffix = band_name;\n"
+        "\t\tif (band_name == '2g') {\n"
+        "\t\t\tband_suffix = '2.4g';\n"
+        "\t\t\tchannel = 5;\n"
+        "\t\t\thtmode = 'HE40';\n"
+        "\t\t} else if (band_name == '5g') {\n"
+        "\t\t\tif (pci) {\n"
+        "\t\t\t\tband_suffix = '5.2g';\n"
+        "\t\t\t\tchannel = 36;\n"
+        "\t\t\t\thtmode = 'HE160';\n"
+        "\t\t\t} else {\n"
+        "\t\t\t\tband_suffix = '5.8g';\n"
+        "\t\t\t\tchannel = 161;\n"
+        "\t\t\t\thtmode = 'HE80';\n"
+        "\t\t\t}\n"
+        "\t\t}\n"
+    )
+    src = src.replace(anchor, anchor + inject, 1)
 
-src = pat.sub(lambda m: m.group(1) + m.group(2) + "US" + m.group(2), src, count=1)
+    pat = re.compile(r"(\$\{defaults\?\.ssid \|\| )(['\"])([^'\"]*)\2")
+    if not pat.search(src):
+        sys.exit("mac80211.uc: ssid fallback not found")
+    src = pat.sub(
+        lambda m: m.group(1) + m.group(2) + "alexwrt-jdcloud-" + m.group(2) + " + band_suffix",
+        src, count=1)
+
+    pat = re.compile(r"(\$\{country \|\| )(['\"])([^'\"]*)\2")
+    if not pat.search(src):
+        sys.exit("mac80211.uc: country fallback not found")
+    src = pat.sub(lambda m: m.group(1) + m.group(2) + "US" + m.group(2), src, count=1)
+
+    # LibWrt 上游默认 encryption='none' 且 key=''，必须兜底成 psk2+ccmp / 12345678
+    src = re.sub(r"encryption\s*=\s*(['\"])none\1;", "encryption = 'psk2+ccmp';", src)
+    src = re.sub(
+        r"(\$\{defaults\?\.encryption \|\| )(['\"])none\2",
+        lambda m: m.group(1) + m.group(2) + "psk2+ccmp" + m.group(2),
+        src,
+        count=1,
+    )
+    if "psk2+ccmp" not in src:
+        sys.exit("mac80211.uc: psk2+ccmp encryption fallback not found")
+
+    pat_key = re.compile(r"(\$\{defaults\?\.key \|\| )(['\"])([^'\"]*)\2")
+    if not pat_key.search(src):
+        sys.exit("mac80211.uc: key fallback not found")
+    src = pat_key.sub(
+        lambda m: m.group(1) + "(band_name == '6g' ? " + m.group(2) + m.group(2) + " : " + m.group(2) + "12345678" + m.group(2) + ")",
+        src,
+        count=1,
+    )
+
+else:
+    sys.exit("mac80211.uc: unsupported layout (neither lower_band/set_section nor band_name anchor found)")
 
 io.open(path, "w", encoding="utf-8", newline="\n").write(src)
 PY
 	then
 		echo "wireless-ssid has been fixed!"
 	else
-		#这里不能只告警：补丁没打上时 SSID 会退回 OWRT，而 ucode 语法错会让
+		#这里不能只告警：补丁没打上时 SSID 会退回上游默认，而 ucode 语法错会让
 		#/sbin/wifi config 直接失败、设备起来没有无线。宁可构建失败。
 		echo "wireless-ssid fix failed!"
 		exit 1
@@ -186,8 +242,8 @@ RELOCATE_MENU() {
 
 RELOCATE_MENU "netbird" "$PACKAGE_PATH/luci-app-netbird" \
 	"admin/services/netbird" "admin/vpn/netbird"
-#openlist2 / qbittorrent 不再预装（qB 与 OpenList 由 luci-app-hub 的页面按需
-#装），所以这里也不再迁它们的菜单 —— 构建树里根本没有这两个包。
+#openlist2 已重新预装进固件，菜单保留在上游「服务」下；qbittorrent 不预装
+#（由 luci-app-hub 按需安装），构建树里没有它。
 #Dockerman 用的是 lisaac 0.5.26（Lua 控制器），它自己就建了
 #entry({"admin","docker"}, firstchild())，顶层「Docker」菜单不需要额外处理。
 #雅典娜屏控刻意留在上游的「服务」下，不做菜单迁移：
@@ -198,17 +254,17 @@ RELOCATE_MENU "netbird" "$PACKAGE_PATH/luci-app-netbird" \
 RELOCATE_MENU "natmapt" "$PACKAGE_PATH/luci-app-natmapt" \
 	"admin/services/natmap" "admin/network/natmap"
 
-#VPN 三个 Lua 界面：passwall / openclash / uu 加速器
+#VPN 两个 Lua 界面：passwall / openclash
 #
-#这三个刻意留在「服务」里，不做迁移。原因是它们不只是菜单路径写在控制器里，
+#这两个刻意留在「服务」里，不做迁移。原因是它们不只是菜单路径写在控制器里，
 #还把 admin/services/<自己> 硬编码进页面内的链接和 AJAX：
 #  · passwall 的 api.url() 是状态轮询、日志窗口、节点跳转、备份恢复共用的
 #    URL 生成器（luasrc/passwall/api.lua 里 string.format("admin/services/%s",
 #    appname)），只搬菜单的话整页 AJAX 全 404；
 #  · openclash 有 90 处引用散在 36 个文件，含保存后的 DISP.build_url 跳转和
 #    <script src> 里的 translate_js；
-#  · uu 加速器状态页模板用 url([[admin]], [[services]], [[uuplugin]], [[status]])。
 #改别人的代码容易在上游更新时静默失效，所以统一按上游位置放，不折腾。
+#（uu 加速器已在自建 fork alexzhong233/luci-app-uugamebooster 中迁移到 admin/vpn/uuplugin。）
 
 #修复 luci-app-uugamebooster 打包期 postinst 失败
 #
@@ -220,9 +276,10 @@ RELOCATE_MENU "natmapt" "$PACKAGE_PATH/luci-app-natmapt" \
 #于是三条 chmod 全部返回 1，post-install 以 exit code 1 结束，整个构建挂在：
 #	package/Makefile:164: package/install] Error 1
 #	include/toplevel.mk:268: world] Error 2
-#处理方式：chmod 加 2>/dev/null 容错，末尾补 exit 0 收尾，再用 IPKG_INSTROOT
-#守卫让脚本只在设备上真正执行。注意 Makefile 里必须写成 $$IPKG_INSTROOT，
-#单写 $ 会被 make 当成变量展开，守卫条件会永久成立。
+#处理方式：仅在 Package/*/postinst 块内为 chmod 加 2>/dev/null 容错、末尾补 exit 0，
+#再用 IPKG_INSTROOT 守卫让脚本只在设备上真正执行（避免全局匹配 endef 误伤
+#其他 define 块）。注意 Makefile 里必须写成 $$IPKG_INSTROOT，单写 $ 会被 make
+#当成变量展开，守卫条件会永久成立。
 #
 #另外把 DEPENDS 里的 +libstdcpp6 换成 +libstdcpp：新版 OpenWrt 已经把 C++ 标准库
 #包改名（package/libs/toolchain 里只有 define Package/libstdcpp）。保留旧名会打出
@@ -234,12 +291,40 @@ UUGAME_MAKEFILE=$(find "$PACKAGE_PATH" -maxdepth 3 -type f \
 
 if [ -n "$UUGAME_MAKEFILE" ]; then
 	echo " "
-	if sed -i \
-		-e 's/+libstdcpp6/+libstdcpp/g' \
-		-e '/^#!\/bin\/sh$/a [ -n "$$IPKG_INSTROOT" ] \&\& exit 0' \
-		-e 's|^chmod +x \(.*\)$|chmod +x \1 2>/dev/null|' \
-		-e 's/^endef$/exit 0\nendef/' \
-		"$UUGAME_MAKEFILE"; then
+	if python3 - "$UUGAME_MAKEFILE" <<'PY'
+import io
+import re
+import sys
+
+path = sys.argv[1]
+src = io.open(path, encoding="utf-8").read()
+
+src = src.replace("+libstdcpp6", "+libstdcpp")
+
+pat = re.compile(r"(^define Package/[^\n]*/postinst\n)(.*?)(^endef$)", re.M | re.S)
+m = pat.search(src)
+if not m:
+    sys.exit("uugamebooster postinst block not found")
+
+body = m.group(2)
+if "IPKG_INSTROOT" not in body:
+    if "#!/bin/sh\n" not in body:
+        sys.exit("uugamebooster postinst shebang not found")
+    body = body.replace("#!/bin/sh\n", "#!/bin/sh\n[ -n \"$$IPKG_INSTROOT\" ] && exit 0\n", 1)
+
+lines = []
+for line in body.splitlines():
+    if line.startswith("chmod +x ") and "2>/dev/null" not in line:
+        line = line + " 2>/dev/null"
+    lines.append(line)
+if not lines or lines[-1].strip() != "exit 0":
+    lines.append("exit 0")
+new_body = "\n".join(lines) + "\n"
+
+src = src[:m.start(2)] + new_body + src[m.end(2):]
+io.open(path, "w", encoding="utf-8", newline="\n").write(src)
+PY
+	then
 		echo "uugamebooster has been fixed!"
 	else
 		echo "uugamebooster fix failed; continuing!"

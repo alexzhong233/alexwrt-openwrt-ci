@@ -1,17 +1,22 @@
 # alexwrt 雅典娜 RE-CS-02 固件
 
-京东云雅典娜 `jdcloud_re-cs-02` 的 OpenWrt 构建，源码取自 `VIKINGYFY/immortalwrt` 的 `owrt` 分支。每天北京时间 06:17 自动编译，也可以在 Actions 页面手动运行。
+京东云雅典娜 `jdcloud_re-cs-02` 的 OpenWrt 双线构建仓库，每日自动编译，也可以在 Actions 页面手动触发：
+
+| 构建线 | 工作流 | 上游源码与分支 | 设备配置 | 定时（北京时间） |
+|---|---|---|---|---|
+| OWRT 主线 | `.github/workflows/ALEXWRT.yml` | `VIKINGYFY/immortalwrt`（`owrt`） | `Config/IPQ60XX-OWRT-WIFI-YES.txt` | 每天 06:17 |
+| LIBWRT 线 | `.github/workflows/LIBWRT.yml` | `LiBwrt/LibWrt`（`25.12-nss`） | `Config/IPQ60XX-LIBWRT-WIFI-YES.txt` | 每天 08:47 |
 
 - 后台地址：`192.168.88.1`
-- root 密码：不预设，首次登录后自行设置
+- root 密码：不预设（**注意**：LibWrt 基线无默认密码，LuCI 打开直接进入、SSH 为空密码，刷完请立即执行 `passwd` 或到「系统 → 管理权」设密）
 - 固件信息里的时间是编译开始时间，方便核对上游源码提交时间
 
 ## 构建入口
 
 | 项目 | 位置 |
 |---|---|
-| 工作流 | `.github/workflows/ALEXWRT.yml`（调度入口）、`WRT-CORE.yml`（实际编译，被调用） |
-| 设备配置 | `Config/IPQ60XX-OWRT-WIFI-YES.txt`（在 `GENERAL.txt` 之后写入，同名项以它为准） |
+| 工作流 | `.github/workflows/ALEXWRT.yml`、`LIBWRT.yml`（调度入口）、`WRT-CORE.yml`（实际编译，被调用） |
+| 设备配置 | `Config/IPQ60XX-OWRT-WIFI-YES.txt` / `Config/IPQ60XX-LIBWRT-WIFI-YES.txt`（均在 `GENERAL.txt` 之后写入，同名项以板级为准） |
 | 软件包处理 | `Scripts/Packages.sh` |
 | 构建期设置 | `Scripts/Settings.sh`（后台地址、主机名）、`Scripts/Handles.sh`（主题与插件修补） |
 | 固件文件注入 | `Files/RE-CS-02/` |
@@ -41,13 +46,13 @@
 | 5.2 GHz | PCIe ath11k 4x4（DTS 里 `pci17cb,1104`） | `alexwrt-jdcloud-5.2g` | 36 | HE160 |
 | 5.8 GHz | SoC 内置 ath11k 2x2 | `alexwrt-jdcloud-5.8g` | 161 | HE80 |
 
-国家码 `US`，加密 `psk2+ccmp`（WPA2-PSK），密码 `12345678`：
+国家码 `US`，加密 `psk2+ccmp`（WPA2-PSK），密码 `12345678`（两条线均由 `Scripts/Handles.sh` 在构建期强制写入兜底值，包括兼容新版 `set_section()` 布局与覆盖 LibWrt 默认的无密码开放热点头）：
 
 ```ucode
-set ${si}.ssid='${defaults?.ssid || 'alexwrt-jdcloud-' + band_suffix}'
+set ${si}.ssid='${defaults?.ssid || "alexwrt-jdcloud-" + band_suffix}'
 set ${si}.encryption='${defaults?.encryption || 'psk2+ccmp'}'
-set ${si}.key='${defaults?.key || '12345678'}'
-set ${s}.country='${country || 'US'}'
+set ${si}.key='${defaults?.key || (band_name == '6g' ? "" : "12345678")}'
+set ${s}.country='${country || "US"}'
 ```
 
 信道和 HT 模式是显式覆盖的：上游对 2G 固定 `width = 20`，对 5G 把 `max_width` 截到 80，所以 2.4G 的 HE40 和 PCIe 卡的 HE160 都必须在补丁里指定。频段后缀跟信道走——36 属 U-NII-1（5.2G），161 属 U-NII-3（5.8G）；PCIe 那块由 `match(phy.path, /pci/)` 识别，SoC 内置 phy 一个设备同时供 2.4G 和 5.8G 两个 band。
@@ -58,22 +63,21 @@ set ${s}.country='${country || 'US'}'
 
 ## 固件内置内容
 
-- OpenAppFilter：`appfilter`、`kmod-oaf`、`luci-app-oaf` 和中文翻译，页面在“服务 -> 应用过滤”。
-- 雅典娜 LED、Harbor File、UU 游戏加速、KMS。qBittorrent 与 OpenList **不在固件里**，
-  由下面的「服务合集」页面按需安装。
+- OpenAppFilter：`appfilter`、`kmod-oaf`、`luci-app-oaf` 和中文翻译，页面在「服务 -> 应用过滤」。
+- 雅典娜 LED、Harbor File、UU 游戏加速（菜单在「VPN -> UU 加速器」）、KMS、`openlist2`（`openlist2` + `luci-app-openlist2` 预装进固件）。qBittorrent **不在固件里**，由下面的「服务合集」页面按需安装。
 - Docker、Docker Compose、服务合集页 [`luci-app-hub`](https://github.com/alexzhong233/luci-app-hub)：
-  qBittorrent / OpenList / 1Panel / WorkBuddy2API 四个服务收在一个页面，页签切换。
+  收进 5 个服务页签——qBittorrent / OpenList / 1Panel / WorkBuddy2API / Magpie。
   qBittorrent 可选原生官方版、原生增强版（EE）、容器官方版、容器增强版；OpenList 可选
-  feeds 版、openlist2、容器版；1Panel 和 WorkBuddy2API 各有本地/容器两套。数据目录优先
-  挂 `/mnt/sda1`，切换运行方式不丢配置。页面只含 ctl 与界面，本体全在运行时安装。
-  另内置 NetBird LuCI、FullConeNAT、RTP2HTTPD、软件包管理器、SysTools。
-- NSS：`nss-firmware`、`kmod-nss-wifi-drv`、`ATH11K_NSS_WIFI` 与 ath11k/mac80211 NSS 补丁都来自上游源码；自建状态页 `luci-app-nss-status` 在“状态 -> NSS 卸载”，直接读 `nss-wifi-drv` 的 debugfs 显示加速状态、各 vdev 收发计数和流表，不含驱动，不负责开启 NSS。
-- 默认进 rootfs：NetBird、PassWall、OpenClash、Dockerman。HomeProxy 和 PassWall2 只编译为可安装模块。
-- 不进固件：ZeroTier、易有云文件管理器、qBittorrent、OpenList 本体，以及旧的
-  `luci-app-1panel` / `luci-app-workbuddy2api` 页面（功能已并入服务合集）。
+  feeds 版、openlist2、容器版；1Panel 和 WorkBuddy2API 各有本地/容器两套；Magpie 仅提供页签并在页面点击安装时拉取 Docker 镜像（`ghcr.io/yetone/magpie`）。数据目录优先挂 `/mnt/sda1`，切换运行方式不丢配置。
+  另内置 NetBird LuCI、FullConeNAT（OWRT 线带 `fullconenat-sonic`，LibWrt 线带 `kmod-nft-fullcone`）、RTP2HTTPD、软件包管理器、SysTools。
+- NSS：
+  - **OWRT 线**：`nss-firmware`、`kmod-nss-wifi-drv`、`ATH11K_NSS_WIFI` 来自上游；自建状态页 `luci-app-nss-status` 在「状态 -> NSS 卸载」，读 `nss-wifi-drv` 的 debugfs。
+  - **LIBWRT 线**：`nss-firmware`、`kmod-qca-nss-drv`、`kmod-qca-nss-ecm` 与 `ATH11K_NSS_SUPPORT` 来自上游与 `nss_packages` feed；同样使用双后端自建状态页 `luci-app-nss-status` 查看核心负载与 ECM 加速流数，并配合 `luci-app-nssecm` 调整 ECM 加速引擎。
+- 默认进 rootfs 的代理与管理组件：NetBird、PassWall、Nikki（含 `mihomo-meta`）、Dockerman。
+- 暂不编译也不进固件（`=n`）：OpenClash、`luci-app-subgen`、HomeProxy、PassWall2、`luci-app-partexp`、ZeroTier、易有云文件管理器、qBittorrent 本体，以及旧的 `luci-app-1panel` / `luci-app-workbuddy2api` 独立页面（功能已并入 `luci-app-hub`）。
 - NetBird 使用原生 CLI，`netbird up` 不做任何参数包装，行为由 LuCI 的 NetBird 页面决定。
 
-软件包在 CI 里由 `Scripts/Packages.sh` 下载进编译树，仓库不保存编译好的 `.ipk`。脚本装到 `/usr/bin/`，说明文档装到 `/usr/share/alexwrt/`，都不注册为常驻服务。逐包核对见 [docs/SOFTWARE-AUDIT.md](docs/SOFTWARE-AUDIT.md)。
+软件包在 CI 里由 `Scripts/Packages.sh` 下载进编译树，仓库不保存编译好的 `.apk`。历史逐包审计与对照文档已归档在 [backup/docs/SOFTWARE-AUDIT.md](backup/docs/SOFTWARE-AUDIT.md)。
 
 ## 刷机后：PassWall 的 Geo 规则（必做一次）
 
@@ -115,8 +119,8 @@ curl -L -o /usr/share/v2ray/geosite.dat \
 
 ## 软件源与固件文件
 
-- 软件源保留上游默认：`/etc/apk/repositories.d/distfeeds.list` 由 base-files 在编译时按 `feeds.conf.default` 自动生成（指向 downloads.immortalwrt.org），仓库不覆盖它。
-- 国内下载再追加一份南京大学镜像，写在 `Files/RE-CS-02/etc/apk/repositories.d/customfeeds.list`（官方指定的自定义位置，sysupgrade 后保留，且在 `distfeeds.list` 之前加载）。两份源版本一致，不会冲突；镜像滞后导致装不上时删掉对应几行即可。iStore 的源由 `luci-app-store` 自带的 `compat.list` 提供，这里不用重复写。
+- 软件源保留上游默认：`/etc/apk/repositories.d/distfeeds.list` 由 base-files 在编译时按 `feeds.conf.default` 自动生成，仓库不覆盖它。
+- 自定义源按线二选一：仓库的 `Files/RE-CS-02/etc/apk/repositories.d/` 下放着 `customfeeds.list.owrt`（南京大学 ImmortalWrt 镜像）与 `customfeeds.list.libwrt`（仅含注释的空模板，避免混用 ImmortalWrt 源导致 `UNTRUSTED signature` 或 `kmod-*` ABI 冲突），构建时由 `WRT-CORE.yml` 按配置选定一份重命名为 `customfeeds.list` 并删除另一份。iStore 的源由 `luci-app-store` 自带的 `compat.list` 提供。
 - 每次编译产出两个镜像：`...-squashfs-factory.bin`（首次刷机/救砖，走 U-Boot 或原厂 web 后台）和 `...-squashfs-sysupgrade.bin`（系统内升级）。两者内容一致，只是封装不同。
 
 ## 脚本
@@ -168,7 +172,7 @@ UU 加速某台设备时，会动两类规则来抢 DNS：
 
 **关键差别：UU 停止加速会清掉 `ip rule`、`tun163` 和 nat 规则，但不会清 ip6tables 里那两条 DROP。** 所以「用 UU 加速过一次」之后，这台设备的 IPv6 解析会一直失败到下次重启，而且没有任何提示——浏览器走 DoH 照常能开网页，只有系统解析和命令行工具受影响。
 
-这两件事现在由插件自己做。本仓库拉的是 [fork 版 `luci-app-uugamebooster`](https://github.com/alexzhong233/luci-app-uugamebooster)（见 `Scripts/Packages.sh` 的 `UPDATE_PACKAGE`），它自带 `uu-passwall-sync`：`/etc/init.d/uuplugin` 在 `passwall_mode=cooperative`（默认）且 `/etc/config/passwall` 存在时启动它，每 `passwall_interval`（默认 5 秒）把「发往路由器自己的 UDP/53」的 `RETURN` 顶回 `nat PREROUTING` 第 1 位，并删掉 `ip6tables filter` 里那两条 DROP。
+这两件事现在由插件自己做。本仓库拉的是 [fork 版 `luci-app-uugamebooster`](https://github.com/alexzhong233/luci-app-uugamebooster)（见 `Scripts/Packages.sh` 的 `UPDATE_PACKAGE`），菜单已移至「**VPN → UU 加速器**」，内置共存引擎（`uu-sync.d/*.sh` 处理 OpenClash / Nikki / HomeProxy / UA3F，`uu-passwall-sync` 处理 PassWall）：`/etc/init.d/uuplugin` 在 `passwall_mode=cooperative`（默认）且 `/etc/config/passwall` 存在时启动它，每 `passwall_interval`（默认 5 秒）把「发往路由器自己的 UDP/53」的 `RETURN` 顶回 `nat PREROUTING` 第 1 位，并删掉 `ip6tables filter` 里那两条 DROP。
 
 几个与旧脚本不同的地方：
 
@@ -176,22 +180,20 @@ UU 加速某台设备时，会动两类规则来抢 DNS：
 - 判据是「同一台设备的第一条 dport 53 规则是不是 RETURN」——UU 每次开始加速都会把自己的 DNAT `-I` 到第 1 位，只查「RETURN 存在」会误判成已生效；
 - 关掉集成或停服务时会把插进去的规则收干净，不留残余。
 
-开关在 LuCI 的「服务 → UU 加速器 → PassWall」，状态页会显示当前豁免了几台被加速设备。
+开关在 LuCI 的「VPN → UU 加速器 → PassWall」，状态页会显示当前豁免了几台被加速设备。
 
 早先独立的 `uu-dns-guard`（`/usr/bin/uu-dns-guard.sh` + `/etc/init.d/uu-dns-guard`）已从固件删除：它一直是默认不启用，功能与插件重复，而且只做全局放行、不区分设备。如果某个旧固件曾 `enable` 过它，升级后 `/etc/rc.d` 里可能留下一个指向已删文件的符号链接，`rm -f /etc/rc.d/S99uu-dns-guard` 即可。
 
 不开这个集成也有办法绕开：把设备的 DNS 收敛到 IPv4 的 `192.168.88.1`（或直接关掉网卡的 IPv6），IPv6 DNS 那条路本来就已经通过 `uci set dhcp.lan.ra_dns='0'` 停止下发了。
 
-### 升级辅助
+### 升级辅助（归档工具）
+
+以下辅助脚本已归档在 [backup/tools/](backup/tools/)，不预装进固件：
 
 | 脚本 | 作用 |
 |---|---|
 | `export-router-state.sh` | 升级前导出软件包清单、UCI 配置、服务状态和脚本；默认按键名和值特征启发式脱敏，`INCLUDE_SECRETS=1` 才原样导出 |
 | `restore-package-list.sh` | 按清单重装软件包，不恢复配置、Docker 卷、证书和令牌 |
-
-```sh
-/usr/bin/export-router-state.sh /tmp/router-export-before-upgrade
-```
 
 早期版本提供的 `netbird up --disable-dns` 包装器、`netbird-dns-guard.sh`、`netbird-dnsmasq-wt0-fix.sh`、`netbird-passwall-diagnose.sh` 和 `netbird-passwall-lan-fix.sh` 已移出固件，源码保留在 [backup/netbird-legacy/](backup/netbird-legacy/)。
 
@@ -204,10 +206,11 @@ UU 加速某台设备时，会动两类规则来抢 DNS：
 | `Scripts/` | 构建期脚本（软件包下载、设置注入、上游修补） |
 | `Config/` | 设备与软件包配置 |
 | `Files/RE-CS-02/` | 直接注入固件 rootfs 的文件 |
-| `docs/` | 基线对比、仓库对比、软件清单等分析文档；`config-snapshot-ec73307.txt` 是另一项目（带 PON feeds）的 `.config` 快照，仅作参考 |
+| `backup/` | 已归档的基线对比、历史文档、旧版 LuCI/NetBird 与辅助工具脚本 |
 
 ## 上游与刷机
 
-- 源码：<https://github.com/VIKINGYFY/immortalwrt.git>（`owrt` 分支）
+- OWRT 主线源码：<https://github.com/VIKINGYFY/immortalwrt.git>（`owrt` 分支）
+- LIBWRT 线源码：<https://github.com/LiBwrt/LibWrt.git>（`25.12-nss` 分支）
 - 高通 U-Boot（沉心）：<https://github.com/chenxin527/uboot-qsdk12.5-build.git>
 - 高通 U-Boot（小猪）：<https://github.com/1980490718/u-boot-2016.git>

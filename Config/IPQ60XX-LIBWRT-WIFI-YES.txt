@@ -1,7 +1,7 @@
-# 京东云雅典娜 RE-CS-02 —— LibWrt 25.12-nss 试编版
+# 京东云雅典娜 RE-CS-02 —— LibWrt 25.12-nss
 #
-# 与 IPQ60XX-OWRT-WIFI-YES.txt 的唯一差别是 NSS 相关项：两个上游的
-# NSS 实现完全不同，包名和 Kconfig 符号都不一样，不能混用。
+# 与 IPQ60XX-OWRT-WIFI-YES.txt 的主要差别是 NSS 实现不同：两个上游的
+# NSS 架构、包名和 Kconfig 符号都不一样，不能混用。
 #
 #   VIKINGYFY/immortalwrt@owrt   nss-wifi-drv（自研驱动 + wifili 用户态）
 #                                CONFIG_ATH11K_NSS_WIFI
@@ -15,10 +15,8 @@
 #
 # 两边都是真正的 WiFi 卸载（LibWrt 那套靠 package/kernel/mac80211/patches/nss
 # 的 ath11k 补丁 + nss-drv 的 wifili 转发），不是「只卸有线」。
-#
-# 注意：本文件只用于试编对比。luci-app-nss-status 读的是 nss-wifi-drv 的
-# debugfs 布局，在 LibWrt 上会显示「未就绪」—— 那是预期行为，不代表 NSS 没工作，
-# 要确认得看 /sys/kernel/debug/qca-nss-drv/。
+# 自建状态页 luci-app-nss-status 已兼容两套后端，在 LibWrt 上会自动切换
+# 读取 /sys/kernel/debug/qca-nss-drv/ 与 /sys/kernel/debug/ecm/。
 CONFIG_TARGET_qualcommax=y
 CONFIG_TARGET_qualcommax_ipq60xx=y
 CONFIG_TARGET_DEVICE_qualcommax_ipq60xx_DEVICE_jdcloud_re-cs-02=y
@@ -42,54 +40,39 @@ CONFIG_ATH11K_NSS_SUPPORT=y
 CONFIG_PACKAGE_nss-firmware=y
 CONFIG_PACKAGE_kmod-qca-nss-drv=y
 CONFIG_PACKAGE_kmod-qca-nss-ecm=y
-# 状态页照装：包本身编得出来，只是读不到 nss-wifi-drv 的 debugfs。
-# 留着正好用来确认「换了上游之后页面确实拿不到数」，别让它默默消失。
+# 自建 NSS 状态页（alexzhong233/luci-app-nss-status）：已支持双后端自动识别，
+# 在 LibWrt 上直接读 /sys/kernel/debug/qca-nss-drv/stats 与 /sys/kernel/debug/ecm/，
+# 展示 NSS 核心负载、各模块收发计数、ECM 加速流数及「状态 → 概览」区块（13_nss-status.js）。
+# 不再重复安装功能重合的第三方 yduke/luci-app-nss。
 CONFIG_PACKAGE_luci-app-nss-status=y
-# 这边真正的状态页：yduke/luci-app-nss 读 /sys/kernel/debug/qca-nss-drv/stats
-# 和 /sys/kernel/debug/ecm/，显示 NSS 核心负载、各模块收发计数、ECM 加速流数，
-# 并在「状态 → 概览」插一个 NSS 区块。JS 版 LuCI，只依赖 luci-base。
 # 配套 luci-app-nssecm 是 ECM 的配置表单（acceleration_engine 可选
 # auto / nss / sfe / ppe / nss-sfe），改完重启 /etc/init.d/qca-nss-ecm。
-CONFIG_PACKAGE_luci-app-nss=y
 CONFIG_PACKAGE_luci-app-nssecm=y
 
-# ── 数据面扩容：只补「真能吃到卸载」的三块 ────────────────────────────
-# 判断依据是 qca-nss-drv/Config.in：所有 NSS_DRV_*_ENABLE 默认都是 n，只有
-# 被 select 或显式写 y 才编进 drv。而 clients 里每个 .ko 的 DEPENDS 都写着
-# +@NSS_DRV_XXX_ENABLE —— 两层开关，少一层模块直接不可见，写了也会被丢掉。
+# ── 数据面核心开关（显式固定关键三条路径）─────────────────────────────
+# 说明：LiBwrt/LibWrt 上游已经在 target/linux/qualcommax/Makefile 与
+# ipq60xx/target.mk 的 DEFAULT_PACKAGES 里默认选中了全套 kmod-qca-nss-drv-*
+# 与 kmod-qca-nss-crypto（并由各自的 DEPENDS 反向开启对应 NSS_DRV_*_ENABLE），
+# 本配置遵循 LibWrt 默认构建，不做额外裁剪；下面仅把当前环境真正依赖的
+# 三条转发路径显式写死，防止上游将来调整 DEFAULT_PACKAGES 后悄悄丢失：
 #
-# 桥接（BRIDGE）：LAN 内互访（WiFi↔有线、有线↔有线、NAS↔PC）是 L2 转发，
-#   既不经过代理也不出 WAN，是这台机器上唯一「开了就真省 CPU」的流量。
+# 桥接（BRIDGE）：LAN 内互访（WiFi↔有线、有线↔有线、NAS↔PC）的 L2 硬件转发。
 CONFIG_NSS_DRV_BRIDGE_ENABLE=y
 CONFIG_PACKAGE_kmod-qca-nss-drv-bridge-mgr=y
-# VLAN：802.1q 子接口。bridge-mgr 的 DEPENDS 会自动带 vlan-mgr，显式写出来
-#   是为了 .config 里一眼能核对。
+# VLAN：802.1q 子接口（bridge-mgr 也会依赖 vlan-mgr）。
 CONFIG_NSS_DRV_VLAN_ENABLE=y
 CONFIG_PACKAGE_kmod-qca-nss-drv-vlan-mgr=y
-# PPPoE：家宽拨号时 WAN 侧所有流量都挂在 ppp 接口上。drv 侧的
-#   NSS_DRV_PPPOE_ENABLE 只有 kmod-pppoe 被选中时才会被 ecm 的 DEPENDS 带起来，
-#   而 clients 的 qca-nss-pppoe.ko 没有任何包会自动选 —— 缺它 ECM 就没有
-#   PPPoE accel engine，只能加速 LAN 内的 L3 流，等于白开。三行都写死。
+# PPPoE：家宽拨号时 WAN 侧流量走 ppp 接口，缺它 ECM 就没有 PPPoE 卸载引擎。
 CONFIG_PACKAGE_kmod-pppoe=y
 CONFIG_NSS_DRV_PPPOE_ENABLE=y
 CONFIG_PACKAGE_kmod-qca-nss-drv-pppoe=y
 #
-# 以下刻意不补，开了也是白占内存：
-#   · IPSEC / TLS / DTLS / QVPN —— 只对「路由器自己终结」的连接有效。
-#     客户端↔外网的 HTTPS 是端到端加密，NSS 看不到明文；VPN 同理。
-#     真正跑在隧道里的是 netbird(WireGuard)，NSS 根本没有 WireGuard accel，
-#     而 IPSEC 那套是给 strongSwan 用的，和 wt0 无关。
-#   · L2TP / PPTP / GRE / VXLAN / MAP-T / TUN6RD / TUNIPIP6 —— 没有任何一条在用。
-#   · SHAPER / IGS —— 没做 SQM 限速，也不看 IPTV 组播。
-#   · LAG —— 没做链路聚合。
-#   · WIFI_MESH —— 走的是 AP 不是 802.11s。
-#
-# docker / uu / nikki / passwall 这四类本来就不可能卸载，别指望：
+# 注意：docker / uu / nikki / passwall 这四类本来就不走 NSS 卸载：
 #   docker 的 veth 是纯软件设备，NSS 不认识；uu 和代理靠 tproxy + mark 打标，
 #   ECM 见到标记就主动跳过。它们只会占用 conntrack，不会占用 NSS 连接表。
 
-# 固件内置：NetBird、Dockerman、PassWall
-# 编译但不入固件（=m）：OpenClash、订阅转换 subgen
+# 固件内置：NetBird、Dockerman、PassWall、Nikki
+# 暂不编译（=n，避免编完不发布白占耗时与缓存）：OpenClash、subgen、HomeProxy、PassWall2
 CONFIG_PACKAGE_netbird=y
 CONFIG_PACKAGE_luci-app-netbird=y
 CONFIG_PACKAGE_luci-app-netbird-tools=y
@@ -113,19 +96,11 @@ CONFIG_PACKAGE_docker=y
 CONFIG_PACKAGE_dockerd=y
 CONFIG_PACKAGE_docker-compose=y
 CONFIG_PACKAGE_luci-app-passwall=y
-# OpenClash 打包成 =m（不入固件，编译出 ipk 供软件源安装）。
-# 来源同时改成 vernesong/OpenClash 的 dev 分支（见 Scripts/Packages.sh），
-# 不再用官方 feeds 的稳定版。
-CONFIG_PACKAGE_luci-app-openclash=m
-# OpenClash 的运行时依赖。它已改成 =m（不入固件），但这些依赖不会跟着
-# 进固件 —— 用户在软件源里 apk add luci-app-openclash 时，apk 会去找
-# ruby / ruby-yaml / unzip，固件和软件源里都没有就装不上。
-# 所以这些也编成 =m，跟 openclash 一起发布到 release。
-# （dnsmasq-full / curl / ip-full / kmod-tun 已经是 =y，不用重复）
-CONFIG_PACKAGE_ruby=m
-CONFIG_PACKAGE_ruby-yaml=m
-CONFIG_PACKAGE_unzip=m
-CONFIG_PACKAGE_ca-bundle=m
+# OpenClash 及 Ruby 运行时统一设为 =n（release 只发固件不发 apk，=m 编完即弃白占耗时）。
+# （unzip / ca-bundle 已被其它预装插件自动依赖为 =y，这里不再冗余保留 =m。）
+CONFIG_PACKAGE_luci-app-openclash=n
+CONFIG_PACKAGE_ruby=n
+CONFIG_PACKAGE_ruby-yaml=n
 CONFIG_PACKAGE_luci-app-netwizard=y
 CONFIG_PACKAGE_luci-i18n-netwizard-zh-cn=y
 CONFIG_PACKAGE_luci-app-vantage=y
@@ -135,8 +110,8 @@ CONFIG_PACKAGE_athena-led=y
 CONFIG_PACKAGE_luci-app-harbor-file=y
 CONFIG_PACKAGE_luci-app-diskman=y
 CONFIG_PACKAGE_luci-app-mini-diskmanager=n
-CONFIG_PACKAGE_luci-app-fullconenat-sonic=y
-CONFIG_PACKAGE_luci-i18n-fullconenat-sonic-zh-cn=y
+# LibWrt 使用 ImmortalWrt 原生 kmod-nft-fullcone（开关在「网络 → 防火墙」常规设置），没有 fullconenat-sonic。
+CONFIG_PACKAGE_kmod-nft-fullcone=y
 CONFIG_PACKAGE_rtp2httpd=y
 CONFIG_PACKAGE_luci-app-rtp2httpd=y
 CONFIG_PACKAGE_luci-i18n-rtp2httpd-zh-cn=y
@@ -153,10 +128,10 @@ CONFIG_PACKAGE_luci-app-uugamebooster=y
 CONFIG_PACKAGE_nikki=y
 CONFIG_PACKAGE_luci-app-nikki=y
 CONFIG_PACKAGE_mihomo-meta=y
-CONFIG_PACKAGE_luci-app-subgen=m
+CONFIG_PACKAGE_luci-app-subgen=n
 CONFIG_PACKAGE_vlmcsd=y
 CONFIG_PACKAGE_luci-app-vlmcsd=y
 
-# 覆盖 GENERAL.txt 的通用项：这两个在 GENERAL 里是 =y，雅典娜上只编译不预装。
-CONFIG_PACKAGE_luci-app-homeproxy=m
-CONFIG_PACKAGE_luci-app-passwall2=m
+# 覆盖 GENERAL.txt 的通用项：这两个在 GENERAL 里是 =y，雅典娜上改 =n 不编包不预装。
+CONFIG_PACKAGE_luci-app-homeproxy=n
+CONFIG_PACKAGE_luci-app-passwall2=n

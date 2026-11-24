@@ -244,22 +244,12 @@ UPDATE_NESTED_PACKAGE "luci-app-athena-led" \
 	"main" \
 	"luci-app-athena-led"
 UPDATE_TOPLEVEL_PACKAGE "luci-app-harbor-file" "destan19/luci-app-harbor-file" "main"
-# NSS 状态页（读 nss-wifi-drv 的 debugfs）。已独立成仓库，不再放本地 LuCI/。
-# 仓库根目录就是包本身（Makefile 在根上），所以走 TOPLEVEL；换板子只需改页面里的
-# 39000000.nss 设备名。别的固件也能直接用这个仓库。
+# 自建 NSS 状态页：已同时兼容 OWRT 的 nss-wifi-drv（/sys/kernel/debug/39000000.nss/）
+# 与 LibWrt 的 qca-nss-drv + ecm（/sys/kernel/debug/qca-nss-drv/stats/、/ecm/），
+# 仓库根目录就是包本身（Makefile 在根上），所以走 TOPLEVEL。
 UPDATE_TOPLEVEL_PACKAGE "luci-app-nss-status" "alexzhong233/luci-app-nss-status" "main"
-# NSS 状态页 + ECM 控制页，给「qca-nss-drv + qca-nss-ecm」那套上游用（目前是
-# LibWrt/25.12-nss 那条试编线，见 .github/workflows/LIBWRT.yml）。
-#
-# 两套 NSS 实现的 debugfs 完全不同，页面不能混用：
-#   nss-wifi-drv（VIKINGYFY/owrt）  /sys/kernel/debug/39000000.nss/
-#                                   → 上面那个自建页面
-#   qca-nss-drv + ecm（LibWrt）     /sys/kernel/debug/qca-nss-drv/stats/、/ecm/
-#                                   → 这两个包
-# 两边都装也不会互相干扰，各自读自己的目录，读不到就自己隐藏/显示空。
-#
-# 只在选中的 Config 里写 CONFIG_PACKAGE_* 才会进固件，这里 clone 不影响主线。
-UPDATE_TOPLEVEL_PACKAGE "luci-app-nss" "yduke/luci-app-nss" "master"
+# ECM 控制页，供 LibWrt（qca-nss-drv + qca-nss-ecm）调整加速引擎。
+# 状态展示已统一交给上面的自建 luci-app-nss-status，不再额外引入功能重合的 luci-app-nss。
 UPDATE_TOPLEVEL_PACKAGE "luci-app-nssecm" "Arthur97172/luci-app-nssecm" "main"
 # NetBird × PassWall 共存：规则守护（nft monitor 事件驱动）+ LuCI 状态页。
 # 以前拆成两半——页面在 LuCI/，三个脚本在 Files/ 覆盖层——现在合成一个包，
@@ -350,21 +340,18 @@ if [[ "${WRT_APPFILTER,,}" == "true" ]]; then
 	rm -rf "$OAF_TMP"
 fi
 
-# NSS 走上游的 nss-wifi-drv：它自己 boot NSS 固件，用 wifili 把无线帧直接送进
-# NSS 硬件（日志里的 "wifili: radio 0 rxdma"），是真正生效的无线加速。
-# 这里只做存在性检查，装不装由 Config 决定。
-#
-# 以前还会 clone yduke/luci-app-nss 装上监控页，但那个页面读的是
-# /sys/kernel/debug/qca-nss-drv/stats 和 /sys/kernel/debug/ecm/，只有
-# qca-nss-drv + ecm 那套数据平面才会创建这两个目录。本上游用 nss-wifi-drv，
-# 目录永远不存在，页面就会一直显示「未加载」，让人误以为加速没工作。
-# 真实状态在 /sys/bus/platform/devices/39000000.nss/state（ready=1 / peers=N /
-# wlan=3）和 logread -e nss-wifi，所以不再装那个页面。
+# NSS 存在性检查（装不装由 Config 决定）：
+#   · VIKINGYFY/owrt 走自研 nss-wifi-drv（./package/qca-nss/nss-wifi-drv），
+#     真实状态在 /sys/bus/platform/devices/39000000.nss/state；
+#   · LiBwrt/25.12-nss 走 nss_packages feed 的 qca-nss-drv + qca-nss-ecm
+#     （./feeds/nss_packages/qca-nss-drv），真实状态在
+#     /sys/kernel/debug/qca-nss-drv/stats 与 /sys/kernel/debug/ecm/。
 if [ -d ./package/qca-nss/nss-wifi-drv ]; then
 	echo "NSS Wi-Fi offload driver present (nss-wifi-drv)."
 	echo "  live state: /sys/bus/platform/devices/39000000.nss/state"
-elif [ -d ./package/qca-nss/qca-nss-drv ]; then
-	echo "::warning::Base tree carries the qca-nss-drv data plane instead of nss-wifi-drv; Wi-Fi frames would fall back to the host path." >&2
+elif [ -d ./feeds/nss_packages/qca-nss-drv ] || [ -d ./package/feeds/nss_packages/qca-nss-drv ] || [ -d ./package/qca-nss/qca-nss-drv ]; then
+	echo "NSS data plane present (qca-nss-drv + ecm)."
+	echo "  live state: /sys/kernel/debug/qca-nss-drv/stats & /sys/kernel/debug/ecm/"
 else
 	echo "::warning::No NSS packages in the base tree; Wi-Fi will run on the host path." >&2
 fi

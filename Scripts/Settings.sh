@@ -28,8 +28,11 @@ sed -i "s/hostname='.*'/hostname='$WRT_NAME'/g" $CFG_FILE
 echo "CONFIG_PACKAGE_luci=y" >> ./.config
 echo "CONFIG_LUCI_LANG_zh_Hans=y" >> ./.config
 echo "CONFIG_PACKAGE_luci-theme-$WRT_THEME=y" >> ./.config
-echo "CONFIG_PACKAGE_luci-app-$WRT_THEME=y" >> ./.config
-echo "CONFIG_PACKAGE_luci-app-$WRT_THEME-config=y" >> ./.config
+for THEME_PKG in "luci-app-$WRT_THEME" "luci-app-$WRT_THEME-config"; do
+	if find ./package ./feeds/luci -maxdepth 4 -type d -name "$THEME_PKG" 2>/dev/null | grep -q .; then
+		echo "CONFIG_PACKAGE_$THEME_PKG=y" >> ./.config
+	fi
+done
 
 #引入私有扩展配置
 if [ -f "$GITHUB_WORKSPACE/Config/PRIVATE.txt" ]; then

@@ -20,11 +20,13 @@ set -e
 
 PKG_NAME="luci-app-uugamebooster"
 PKG_DIR="$(pwd)/package/$PKG_NAME"
-REPO_URL="https://github.com/xiaodoudou/luci-app-uugamebooster"
+REPO_URL="https://github.com/alexzhong233/luci-app-uugamebooster"
 REPO_BRANCH="master"
 ZIG_VERSION="0.13.0"
 PRELOAD_DIR="$PKG_DIR/root/usr/lib/uuplugin"
 EXPECTED_SHIMS=5
+CLONE_CACHE_ROOT="${CLONE_CACHE_ROOT:-${TMPDIR:-/tmp}/wrt-clone-cache}"
+CACHED_SRC="$CLONE_CACHE_ROOT/alexzhong233_luci-app-uugamebooster@$REPO_BRANCH"
 
 warn() { echo "::warning::$*"; }
 
@@ -37,10 +39,15 @@ fi
 TMP=$(mktemp -d)
 trap 'rm -rf "$TMP"' EXIT
 
-# 包的 Makefile 在子目录里，tools/ 和 src/ 不在提取范围内，需要单独取一次
-if ! git clone --depth 1 --branch "$REPO_BRANCH" "$REPO_URL" "$TMP/src" >/dev/null 2>&1; then
-	warn "拉取 $REPO_URL 失败，uu-view shim 未生成：设备列表只能过滤 bind mount 覆盖的两个数据源"
-	exit 0
+# 优先复用 Packages.sh 在同一步骤里留下的克隆缓存，避免重复拉取
+if [ -f "$CACHED_SRC/tools/build-preload.sh" ]; then
+	SRC_TREE="$CACHED_SRC"
+else
+	if ! git clone --depth 1 --branch "$REPO_BRANCH" "$REPO_URL" "$TMP/src" >/dev/null 2>&1; then
+		warn "拉取 $REPO_URL 失败，uu-view shim 未生成：设备列表只能过滤 bind mount 覆盖的两个数据源"
+		exit 0
+	fi
+	SRC_TREE="$TMP/src"
 fi
 
 # zig 自带全架构 musl 工具链，是上游指定的编译方式；系统源里没有它。
@@ -67,7 +74,7 @@ fi
 
 mkdir -p "$PRELOAD_DIR"
 echo "编译 uu-view shim 到 $PRELOAD_DIR"
-if ! sh "$TMP/src/tools/build-preload.sh" "$PRELOAD_DIR"; then
+if ! sh "$SRC_TREE/tools/build-preload.sh" "$PRELOAD_DIR"; then
 	warn "build-preload.sh 执行失败，uu-view shim 未生成"
 	exit 0
 fi
@@ -79,4 +86,12 @@ if [ "$BUILT" -ne "$EXPECTED_SHIMS" ]; then
 	warn "uu-view shim 只生成 $BUILT/$EXPECTED_SHIMS 个，缺失架构的设备列表过滤会降级"
 else
 	echo "uu-view shim 就绪：$BUILT 个架构"
+	# 64 位 ARM 目标只需 aarch64 shim，编完验证齐 5 个后再剪裁非本机架构（尤其是 ~189 KiB 的 arm）
+	case "${WRT_TARGET:-}" in
+		qualcommax|mediatek|rockchip|airoha|QUALCOMMAX|MEDIATEK|ROCKCHIP|AIROHA)
+			find "$PRELOAD_DIR" -maxdepth 1 -type f -name 'uu-view-preload-*.so' ! -name 'uu-view-preload-aarch64.so' -delete
+			echo "已按目标平台 ${WRT_TARGET} 保留 aarch64 shim："
+			ls -l "$PRELOAD_DIR"
+			;;
+	esac
 fi

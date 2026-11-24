@@ -36,32 +36,36 @@ jobs:
           # 保底，防止撞上仓库 10 GB 的缓存总额限制。
           #
           # 必须按 key 分组，不能全局只留最新一条：一次构建会产生两类缓存
-          #   wrt-dl-<target>-<Config hash>        下载缓存，配置一改就新写一条
-          #   wrt-<source>-<branch>-<target>-<sha> 编译缓存，cache-hit 时会跳过保存
+          #   wrt-dl-v2-<source>-<branch>-<target>-<Config hash>  下载缓存（按线隔离）
+          #   wrt-<source>-<branch>-<target>-<sha>                编译缓存
           # 两类混在一起排序的话，编译缓存永远比下载缓存旧，会被整类删掉，
           # 下一轮必然退化成冷编译（4 小时）。所以去掉末尾 hash 段后的同组
-          # key 算一类，每组各自保留最近 N 条。
+          # key 算一类，每组各自保留最近 1 条。
           #
-          # 保留代数按类区分：
-          #   wrt-dl-*  留 2 代。它的 key 里带 hashFiles('Config/*.txt')，改任何
-          #             一个 Config 文件都会换一条 key；只留 1 代的话，改完配置
-          #             再想回滚就得重新下载 3.5 GB 源码包。
-          #   wrt-*     留 1 代。每次构建后 cache-rollover 已经把同前缀的旧代删
-          #             干净了，这里基本是空操作，留着只为兜住 rollover 漏掉的。
-          #
-          # 预算：dl 2×3.5 GB + 编译缓存两条线各 1~2 GB ≈ 9 GB，贴着 10 GB 上限。
-          # 真超了会被 GitHub LRU 淘汰，所以这里不要再放宽代数。
+          # 预算与旧缓存淘汰：
+          #   · 旧版共享下载缓存 wrt-dl-<target>-* 已经涨到 5.42 GiB（两代就会
+          #     撞穿 10 GiB 上限触发 GitHub LRU 随机淘汰），这里无条件清掉；
+          #   · wrt-dl-v2-* 和 wrt-* 编译缓存各自只留 1 代（两条线合计约
+          #     2×3 GiB + 2×1 GiB ≈ 8 GiB，稳稳留在 10 GiB 预算内）。
           gh cache list --repo "$GH_REPO" --limit 100 --json id,key,createdAt \
             --jq '
-              [ .[] | . + {group: (.key | sub("-[^-]+$"; ""))} ]
-              | group_by(.group)
-              | map(
-                  (if (.[0].group | startswith("wrt-dl-")) then 2 else 1 end) as $keep
-                  | (sort_by(.createdAt) | reverse) as $sorted
-                  | $sorted[$keep:]
+              [
+                ( .[]
+                  | select((.key | startswith("wrt-dl-")) and ((.key | startswith("wrt-dl-v2-")) | not))
+                  | .id
+                ),
+                ( [ .[]
+                    | select(((.key | startswith("wrt-dl-")) and ((.key | startswith("wrt-dl-v2-")) | not)) | not)
+                    | . + {group: (.key | sub("-[^-]+$"; ""))}
+                  ]
+                  | group_by(.group)
+                  | map((sort_by(.createdAt) | reverse) | .[1:])
+                  | flatten
+                  | .[].id
                 )
-              | flatten
-              | .[].id' |
+              ]
+              | unique
+              | .[]' |
             while read -r CACHE_ID; do
               [ -n "$CACHE_ID" ] || continue
               gh cache delete "$CACHE_ID" --repo "$GH_REPO" ||

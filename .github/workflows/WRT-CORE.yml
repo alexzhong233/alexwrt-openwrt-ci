@@ -84,6 +84,8 @@ jobs:
     outputs:
       cache_prefix: ${{steps.initialize-values.outputs.cache_prefix}}
       cache_key: ${{steps.clone-code.outputs.cache_key}}
+      dl_cache_prefix: ${{steps.initialize-values.outputs.dl_cache_prefix}}
+      dl_cache_key: ${{steps.initialize-values.outputs.dl_cache_key}}
     steps:
       - name: Checkout Projects
         uses: actions/checkout@main
@@ -142,6 +144,17 @@ jobs:
           WRT_CACHE_BRANCH=${WRT_BRANCH//\//-}
           WRT_CACHE_TARGET="$WRT_TARGET-$WRT_SUBTARGET"
           WRT_CACHE_PREFIX="wrt-$WRT_CACHE_SOURCE-$WRT_CACHE_BRANCH-$WRT_CACHE_TARGET"
+          WRT_DL_CACHE_PREFIX="wrt-dl-v2-$WRT_CACHE_SOURCE-$WRT_CACHE_BRANCH-$WRT_CACHE_TARGET"
+          DL_CFG_FILES=()
+          if [[ "${WRT_CONFIG,,}" != *"test"* ]]; then
+            DL_CFG_FILES+=("./Config/GENERAL.txt")
+          fi
+          DL_CFG_FILES+=("./Config/$WRT_CONFIG.txt")
+          if [ -n "$WRT_EXTRA_CONFIG" ]; then
+            DL_CFG_FILES+=("./Config/$WRT_EXTRA_CONFIG")
+          fi
+          WRT_DL_HASH=$(cat "${DL_CFG_FILES[@]}" | sha256sum | awk '{print $1}')
+          WRT_DL_CACHE_KEY="$WRT_DL_CACHE_PREFIX-$WRT_DL_HASH"
           WRT_WIFI=$(grep -oE 'WIFI-(YES|NO)$' <<< "${WRT_CONFIG^^}" || true); WRT_WIFI=${WRT_WIFI:-none}
 
           {
@@ -153,6 +166,8 @@ jobs:
             echo "WRT_MARK=${GITHUB_REPOSITORY%%/*}"
             echo "WRT_DATE=$(TZ=UTC-8 date +"%y.%m.%d-%H.%M.%S")"
             echo "WRT_CACHE_PREFIX=$WRT_CACHE_PREFIX"
+            echo "WRT_DL_CACHE_PREFIX=$WRT_DL_CACHE_PREFIX"
+            echo "WRT_DL_CACHE_KEY=$WRT_DL_CACHE_KEY"
             echo "WRT_CACHE_TARGET=$WRT_CACHE_TARGET"
             echo "WRT_SUBTARGET=$WRT_SUBTARGET"
             echo "WRT_TARGET=$WRT_TARGET"
@@ -161,6 +176,8 @@ jobs:
             echo "WRT_LIST=none"
           } >> "$GITHUB_ENV"
           echo "cache_prefix=$WRT_CACHE_PREFIX" >> "$GITHUB_OUTPUT"
+          echo "dl_cache_prefix=$WRT_DL_CACHE_PREFIX" >> "$GITHUB_OUTPUT"
+          echo "dl_cache_key=$WRT_DL_CACHE_KEY" >> "$GITHUB_OUTPUT"
 
           # LibWrt 那条线的上游 base-files 不带 /etc/shadow 的 root 密码，
           # 刷完就是彻底无密码：LuCI 打开直接进，SSH 用 root + 空密码。
@@ -206,19 +223,19 @@ jobs:
             ./wrt/staging_dir/host*
             ./wrt/staging_dir/tool*
 
-      # dl/ 是编译用的源码 tarball（这个配置大概 2~3 GB），以前每轮都从头
-      # 下次下载，网络一慢这一步就是十几分钟起步。单独给它一份缓存：key 带上
-      # Config 的哈希，配置不变就一直命中，配置变了才重新下一份。
-      # 注意：靠 restore-keys 前缀命中的是「部分匹配」，cache-hit 仍为 false，
-      # 所以每改一次 Config/*.txt 都会新写一条，靠 Cache-Clean 按时收拢。
+      # dl/ 是编译用的源码 tarball，按「上游源码+分支+机型」分线独立缓存，
+      # 并只哈希当前线生效的 Config 文件，避免两条线（6.18 owrt vs 6.12 libwrt）
+      # 共用同一个 key 互相占坑、改别家配置也触发整包重传。
+      # 前缀升级为 wrt-dl-v2-*：甩掉此前公用且已膨胀到 5.42 GiB 的旧缓存（由
+      # Cache-Clean 自动清掉），每条线只留 1 代以压在仓库 10 GiB 上限内。
       - name: Restore Download Cache
         id: cache-dl
         if: ${{ !inputs.WRT_TEST }}
         uses: actions/cache/restore@main
         with:
           path: ./wrt/dl
-          key: wrt-dl-${{env.WRT_CACHE_TARGET}}-${{ hashFiles('Config/*.txt') }}
-          restore-keys: wrt-dl-${{env.WRT_CACHE_TARGET}}-
+          key: ${{env.WRT_DL_CACHE_KEY}}
+          restore-keys: ${{env.WRT_DL_CACHE_PREFIX}}-
 
       - name: Prepare Restored Build Cache
         if: ${{ !inputs.WRT_TEST && steps.cache-restore.outputs.cache-matched-key != '' }}
@@ -290,7 +307,7 @@ jobs:
 
           # 顺序即优先级：.config 是后者覆盖前者，所以 GENERAL（全平台通用）
           # 必须排在最前面，板级文件排在它后面，才能覆盖通用项（例如本仓库
-          # 把 GENERAL 里的 luci-app-homeproxy=y 在雅典娜上改成 =m）。
+          # 把 GENERAL 里的 luci-app-homeproxy=y 在雅典娜上改成 =n）。
           # 早期是「板级 → GENERAL → OVERRIDES」三段拼接，靠第三个文件兜底；
           # 现在两边合并，只留「通用 → 板级 → 额外」两段（额外的仍留作口子）。
           if [[ "${WRT_CONFIG,,}" == *"test"* ]]; then
@@ -326,7 +343,7 @@ jobs:
         run: |
           cd ./wrt/
 
-          # 顺序要和 Custom Settings 里的 cat 顺序完全一致，否则覆盖关系算错。
+          # 顺序要和 Custom Settings / Settings.sh 写入 .config 的顺序完全一致，否则覆盖关系算错。
           CONFIG_FILES=""
           if [[ "${WRT_CONFIG,,}" != *"test"* ]]; then
             CONFIG_FILES="$CONFIG_FILES $GITHUB_WORKSPACE/Config/GENERAL.txt"
@@ -335,13 +352,30 @@ jobs:
           if [ -n "$WRT_EXTRA_CONFIG" ]; then
             CONFIG_FILES="$CONFIG_FILES $GITHUB_WORKSPACE/Config/$WRT_EXTRA_CONFIG"
           fi
+          if [ -f "$GITHUB_WORKSPACE/Config/PRIVATE.txt" ]; then
+            CONFIG_FILES="$CONFIG_FILES $GITHUB_WORKSPACE/Config/PRIVATE.txt"
+          fi
 
-          # 同一包可能先后出现 =y 和 =m（板级文件最后写入并生效），
+          # 同一包可能先后出现 =y / =m / =n / is not set（后者覆盖前者），
           # 按出现顺序覆盖，只保留最终为 y 的。
-          REQUESTED=$(cat $CONFIG_FILES |
-            grep -oE '^CONFIG_PACKAGE_[^=]+=[ym]' |
-            sed 's/^CONFIG_PACKAGE_//' |
-            awk -F= '{v[$1]=$2} END {for (k in v) if (v[k]=="y") print k}' | sort)
+          REQUESTED=$({ cat $CONFIG_FILES; [ -n "${WRT_PACKAGE:-}" ] && printf '%b\n' "$WRT_PACKAGE"; } |
+            awk '
+              { sub(/[ \t\r]+$/, "") }
+              /^CONFIG_PACKAGE_[^=]+=[ymn]$/ {
+                line = substr($0, 16)
+                idx = index(line, "=")
+                k = substr(line, 1, idx - 1)
+                v[k] = substr(line, idx + 1)
+              }
+              /^# CONFIG_PACKAGE_[^ ]+ is not set$/ {
+                k = $2
+                sub(/^CONFIG_PACKAGE_/, "", k)
+                v[k] = "n"
+              }
+              END {
+                for (k in v) if (v[k] == "y") print k
+              }
+            ' | sort)
           TOTAL=$(printf '%s\n' "$REQUESTED" | grep -c . || true)
 
           SELF_PKGS=$(grep -oE '^UPDATE_(PACKAGE|TOPLEVEL_PACKAGE|NESTED_PACKAGE) "[^"]+"' \
@@ -508,7 +542,7 @@ jobs:
         uses: actions/cache/save@main
         with:
           path: ./wrt/dl
-          key: wrt-dl-${{env.WRT_CACHE_TARGET}}-${{ hashFiles('Config/*.txt') }}
+          key: ${{env.WRT_DL_CACHE_KEY}}
 
       - name: Save Build Cache
         if: ${{ !inputs.WRT_TEST && success() && steps.cache-restore.outputs.cache-hit != 'true' }}
@@ -557,20 +591,19 @@ jobs:
 
             find ./bin/targets/ -type f -exec mv -f {} ./upload/ \;
 
-            # =m 的包（OpenClash、订阅转换 subgen）只编译、不发布。
-            # release 里只放固件，一个 apk 都不带。
-            # 它们的产物编译完就在 runner 上，随 runner 一起销毁 —— 这是
-            # 有意为之：改 =m 的目的是不占固件体积，不是另开一个分发渠道。
-            # 这里只统计数量并打日志，用来确认它们确实编出来了（编不出来
-            # 也不会让固件失败，但至少日志里看得见）。
+            # =m 的包只编译、不发布（release 只发固件，一个 apk 都不带）。
+            # 如果配置里显式设为 =m，这里确认它们确实编出来了；=n 时静默跳过。
             if [ -d ./bin/packages ]; then
               MCOUNT=$(find ./bin/packages/ -type f -name "*.apk" | wc -l)
               for MUST in luci-app-openclash luci-app-subgen ruby; do
-                if ! find ./bin/packages/ -type f -name "${MUST}*.apk" | grep -q .; then
+                if grep -qxF "CONFIG_PACKAGE_${MUST}=m" .config && \
+                   ! find ./bin/packages/ -type f -name "${MUST}*.apk" | grep -q .; then
                   echo "::warning::=m 包 $MUST 没有编出来，检查它的源码是否拉取成功"
                 fi
               done
-              echo "::notice::=m 包编译产物 ${MCOUNT} 个（不发布，release 只发固件）"
+              if [ "$MCOUNT" -gt 0 ]; then
+                echo "::notice::=m 包编译产物 ${MCOUNT} 个（不发布，release 只发固件）"
+              fi
             fi
 
             # 上游的 sha256sums 已在上面删掉（里面的文件名都对不上改名后的
@@ -617,7 +650,7 @@ jobs:
           target_commitish: ${{ github.sha }}
           prerelease: ${{inputs.WRT_TEST}}
           # 用 * 而不是 *.*：SHA256SUMS 这类没有扩展名的文件也要一起发布。
-          # 只发固件。=m 的包（OpenClash、subgen）只编译不发布，不进 release。
+          # 只发固件，=m 的包只编译不发布，不进 release。
           files: ./wrt/upload/*
           body: |
             这是个平台固件包，内含多个设备！
@@ -654,6 +687,8 @@ jobs:
     needs: core
     if: ${{ !inputs.WRT_TEST && needs.core.result == 'success' }}
     runs-on: ubuntu-latest
+    permissions:
+      actions: write
     concurrency:
       group: wrt-cache-rollover-${{github.ref}}-${{needs.core.outputs.cache_prefix}}
       cancel-in-progress: false
@@ -662,29 +697,40 @@ jobs:
       GH_REPO: ${{github.repository}}
       WRT_CACHE_PREFIX: ${{needs.core.outputs.cache_prefix}}
       WRT_CACHE_KEY: ${{needs.core.outputs.cache_key}}
+      WRT_DL_CACHE_PREFIX: ${{needs.core.outputs.dl_cache_prefix}}
+      WRT_DL_CACHE_KEY: ${{needs.core.outputs.dl_cache_key}}
     steps:
       - name: Roll Build Cache
         run: |
           set -euo pipefail
 
-          CURRENT_CACHE_KEYS=$(gh cache list --repo "$GH_REPO" --key "$WRT_CACHE_KEY" --ref "$GITHUB_REF" --limit 100 --json key --jq '.[].key')
-          CURRENT_CACHE_FOUND=0
-          while IFS= read -r CACHE_KEY; do
-            if [ "$CACHE_KEY" = "$WRT_CACHE_KEY" ]; then
-              CURRENT_CACHE_FOUND=1
-              break
+          roll_cache() {
+            local PREFIX=$1
+            local CURRENT_KEY=$2
+            [ -n "$PREFIX" ] && [ -n "$CURRENT_KEY" ] || return 0
+
+            local CURRENT_CACHE_KEYS CURRENT_CACHE_FOUND=0 CACHE_KEY CACHE_ID
+            CURRENT_CACHE_KEYS=$(gh cache list --repo "$GH_REPO" --key "$CURRENT_KEY" --ref "$GITHUB_REF" --limit 100 --json key --jq '.[].key')
+            while IFS= read -r CACHE_KEY; do
+              if [ "$CACHE_KEY" = "$CURRENT_KEY" ]; then
+                CURRENT_CACHE_FOUND=1
+                break
+              fi
+            done <<< "$CURRENT_CACHE_KEYS"
+
+            if [ "$CURRENT_CACHE_FOUND" -ne 1 ]; then
+              echo "skip cache rollover ($PREFIX): current cache is not available yet"
+              return 0
             fi
-          done <<< "$CURRENT_CACHE_KEYS"
 
-          if [ "$CURRENT_CACHE_FOUND" -ne 1 ]; then
-            echo "skip cache rollover: current cache is not available yet"
-            exit 0
-          fi
+            gh cache list --repo "$GH_REPO" --key "$PREFIX-" --ref "$GITHUB_REF" --limit 100 --json id,key --jq '.[] | [.id, .key] | @tsv' |
+              while IFS=$'\t' read -r CACHE_ID CACHE_KEY; do
+                [ -n "$CACHE_ID" ] || continue
+                [ "$CACHE_KEY" = "$CURRENT_KEY" ] && continue
+                gh cache delete "$CACHE_ID" --repo "$GH_REPO" ||
+                  echo "warning: failed to delete cache $CACHE_ID ($CACHE_KEY)"
+              done
+          }
 
-          gh cache list --repo "$GH_REPO" --key "$WRT_CACHE_PREFIX-" --ref "$GITHUB_REF" --limit 100 --json id,key --jq '.[] | [.id, .key] | @tsv' |
-            while IFS=$'\t' read -r CACHE_ID CACHE_KEY; do
-              [ -n "$CACHE_ID" ] || continue
-              [ "$CACHE_KEY" = "$WRT_CACHE_KEY" ] && continue
-              gh cache delete "$CACHE_ID" --repo "$GH_REPO" ||
-                echo "warning: failed to delete cache $CACHE_ID ($CACHE_KEY)"
-            done
+          roll_cache "$WRT_CACHE_PREFIX" "$WRT_CACHE_KEY"
+          roll_cache "$WRT_DL_CACHE_PREFIX" "$WRT_DL_CACHE_KEY"

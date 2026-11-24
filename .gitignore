@@ -1,3 +1,6 @@
+# macOS Finder 元数据（避免 Files/ 下误打进固件 rootfs）
+.DS_Store
+
 # 本地工作目录记忆/工具数据，不入库
 .workbuddy/
 

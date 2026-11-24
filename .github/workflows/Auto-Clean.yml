@@ -8,7 +8,7 @@ on:
   #
   # 保留规则按「tag 前缀」分组，而不是全局留 N 个：
   #   IPQ60XX-OWRT-WIFI-YES-alexzhong233-owrt-*         保持最近 3 个
-  #   IPQ60XX-LIBWRT-WIFI-YES-LiBwrt-LibWrt-...-*       保持最近 3 个
+  #   IPQ60XX-LIBWRT-WIFI-YES-alexzhong233-25.12-nss-*  保持最近 3 个
   # 之前用 ophub/delete-releases-workflows 的 releases_keep_latest: 3 是全局
   # 计数，两条线抢同一个名额 —— LIBWRT 连发三次，OWRT 的固件就一个不剩了。
   # TEST 的 pre-release 单独计数，且同样按线分组，连续点几次 TEST 不会挤掉
@@ -36,15 +36,21 @@ jobs:
           # tag 形如 <Config>-<owner>-<branch>-YY.MM.DD-HH.MM.SS，
           # 去掉末尾的日期时间就得到「这条线」的标识；再叠上 pre/正式
           # 两个前缀，保证两类各成一组，互不占名额。
+          #
+          # 不能按 createdAt 排序：WRT-CORE.yml 固定了 target_commitish=${{ github.sha }}，
+          # 同一提交下多天自动编译的 release 会共享同一个 createdAt（提交时间），
+          # sort_by(.createdAt) 保留原始列表顺序后再 | reverse 会把新→旧彻底颠倒，
+          # 导致删掉最新的 release。publishedAt 才是实际发布时间，再拼 .tagName
+          # 末尾的 YY.MM.DD-HH.MM.SS 作为同秒兜底排序键。
           gh release list --repo "$GH_REPO" --limit 200 \
-              --json tagName,createdAt,isPrerelease \
+              --json tagName,createdAt,publishedAt,isPrerelease \
               --jq '
                 [ .[] | . + {group:
                     ((if .isPrerelease then "pre:" else "rel:" end)
                      + (.tagName | sub("-[0-9][0-9]\\.[0-9][0-9]\\.[0-9][0-9]-[0-9][0-9]\\.[0-9][0-9]\\.[0-9][0-9]$"; "")))
                 } ]
                 | group_by(.group)
-                | map(sort_by(.createdAt) | reverse | .['"$KEEP"':])
+                | map(sort_by([(.publishedAt // .createdAt), .tagName]) | reverse | .['"$KEEP"':])
                 | flatten
                 | .[].tagName' |
             while read -r TAG; do

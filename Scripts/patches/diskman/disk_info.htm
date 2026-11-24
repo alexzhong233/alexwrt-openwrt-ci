@@ -99,7 +99,7 @@ luci-app-diskman 的磁盘 / RAID 分区条视图。本仓库在构建期整份�
         // handle partitons info
         let partitons_div
         if (item.nodeName == "TR") {
-          partitons_div = '<tr width="100%"><td style="margin:0px; padding:0px; border:0px; overflow:hidden;" colspan="' + ((item.cells && item.cells.length) || 8) + '">'
+          partitons_div = '<tr width="100%"><td style="margin:0px; padding:0px; border:0px; overflow:hidden;" colspan="' + ((item.cells && item.cells.length) || 7) + '">'
         } else if (item.nodeName == "DIV") {
           partitons_div = '<div class="tr cbi-section-table-row cbi-rowstyle-1"><div style="overflow:hidden; width:100%">'
         }
@@ -109,7 +109,7 @@ luci-app-diskman 的磁盘 / RAID 分区条视图。本仓库在构建期整份�
           let p_color = p_colors[n++]
           if (n > 4) { n = 0 }
           let inline_txt = (part.name != '-' && part.name || '') + ' ' + (part.fs != 'Free Space' && part.fs || '') + ' ' + part.size_formated + ' ' + (part.useage != '-' && part.useage || '')
-          let partiton_div = '<div title="' + inline_txt + '" style="float:left; box-sizing:border-box; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; text-align:center;background-color:' + p_color + '; width:' + part_percent + '">' + inline_txt + '</div>'
+          let partiton_div = '<div title="' + inline_txt + '" style="color: #525F7F; float:left; box-sizing:border-box; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; text-align:center;background-color:' + p_color + '; width:' + part_percent + '">' + inline_txt + '</div>'
           partitons_div += partiton_div
         })
         if (item.nodeName == "TR") {
