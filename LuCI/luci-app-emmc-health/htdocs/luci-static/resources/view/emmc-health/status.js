@@ -6,7 +6,7 @@
 /*
  * eMMC 寿命与写入监测 - 详情页
  *
- * 数据来源：/usr/libexec/emmc-health-info（由 rpcd ACL 授权 /bin/sh 执行）。
+ * 数据来源：/usr/libexec/emmc-health-info（由 rpcd ACL 直接授权执行）。
  * 数据字段定义见 LuCI/luci-app-emmc-health 规范第 4 节；为了兼容脚本实现的
  * 细微差异，这里对挂载点等字段做了别名兼容。
  */
@@ -71,7 +71,7 @@ function execStdout(res) {
 }
 
 function fetchData() {
-	return fs.exec('/bin/sh', [ DATA_SCRIPT ]).then(function(res) {
+	return fs.exec(DATA_SCRIPT).then(function(res) {
 		if (res && typeof res === 'object' && res.code && Number(res.code) !== 0)
 			throw new Error(res.stderr || ('命令退出码 ' + res.code));
 
@@ -170,7 +170,7 @@ function preEolInfo(v) {
 		return { n: 2, text: '警告（备用块 80%–90%）', cls: 'emmc-warn', raw: val(v) };
 	if (n === 3)
 		return { n: 3, text: '严重（备用块 >90%）', cls: 'emmc-bad', raw: val(v) };
-	return { n: 0, text: '未知 / 异常（' + val(v) + '）', cls: 'emmc-bad', raw: val(v) };
+	return { n: 0, text: '未知（' + val(v) + '）', cls: 'emmc-muted', raw: val(v) };
 }
 
 function bar(pct, cls) {
@@ -264,10 +264,12 @@ function renderBanner(devices) {
 	var reasons = [];
 	devices.forEach(function(d) {
 		var name = val(d.device);
+		if (parseInt(d.life_a, 16) >= 0x0b)
+			reasons.push(name + ' Type A 寿命超出预估（' + val(d.life_a) + '）');
 		if (parseInt(d.life_b, 16) >= 0x0b)
-			reasons.push(name + ' Type B 寿命超出预估（0x0b）');
+			reasons.push(name + ' Type B 寿命超出预估（' + val(d.life_b) + '）');
 		var n = parseInt(val(d.pre_eol), 16);
-		if (n !== 1)
+		if (n === 2 || n === 3)
 			reasons.push(name + ' Pre-EOL 状态 ' + val(d.pre_eol));
 	});
 
@@ -448,7 +450,8 @@ function buildBody(data) {
 	nodes.push(renderKpis(devices));
 
 	var hasWarning = devices.some(function(d) {
-		return parseInt(d.life_b, 16) >= 0x0b || parseInt(val(d.pre_eol), 16) !== 1;
+		var pre = parseInt(val(d.pre_eol), 16);
+		return parseInt(d.life_a, 16) >= 0x0b || parseInt(d.life_b, 16) >= 0x0b || pre === 2 || pre === 3;
 	});
 	if (hasWarning)
 		nodes.push(renderBanner(devices));

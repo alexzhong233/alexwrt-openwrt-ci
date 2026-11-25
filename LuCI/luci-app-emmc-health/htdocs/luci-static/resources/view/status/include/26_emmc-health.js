@@ -7,6 +7,7 @@
 var C_OK = '#43a047';
 var C_WARN = '#fb8c00';
 var C_BAD = '#e53935';
+var C_MUTED = 'rgba(128,128,128,0.85)';
 
 function hexValue(v) {
 	if (v == null)
@@ -40,26 +41,29 @@ function preEolInfo(v) {
 	var n = hexValue(v);
 
 	switch (n) {
+	case 1:
+		return { color: C_OK, text: (v || '0x01') + ' · 正常（备用块消耗 <80%）' };
 	case 2:
 		return { color: C_WARN, text: (v || '0x02') + ' · 警告（备用块消耗 80%–90%）' };
 	case 3:
 		return { color: C_BAD, text: (v || '0x03') + ' · 严重（备用块消耗 >90%）' };
 	default:
-		return { color: C_OK, text: (v || '0x01') + ' · 正常（备用块消耗 <80%）' };
+		return { color: C_MUTED, text: (v || '-') + ' · 未知' };
 	}
 }
 
 function lifeInfo(v) {
 	var n = hexValue(v);
 
-	if (n == null)
-		return { pct: 0, color: C_OK, text: (v || '-') + ' · 未知' };
+	if (n == null || n < 1)
+		return { pct: 0, color: C_MUTED, text: (v || '-') + ' · 未知' };
 
 	if (n >= 0x0b)
-		return { pct: 100, color: C_BAD, text: '0x0b · >100%（超出预估寿命）' };
-
-	if (n < 1)
-		n = 1;
+		return {
+			pct: 100,
+			color: C_BAD,
+			text: (v || ('0x' + n.toString(16))) + ' · >100%（超出预估寿命）'
+		};
 
 	return {
 		pct: n * 10,
@@ -84,7 +88,7 @@ return baseclass.extend({
 	title: _('eMMC 寿命'),
 
 	load: function() {
-		return fs.exec('/bin/sh', [ '/usr/libexec/emmc-health-info' ])
+		return fs.exec('/usr/libexec/emmc-health-info')
 			.then(function(res) {
 				var data;
 

@@ -73,7 +73,9 @@ extcsd_get() {
 json_init
 
 timestamp=$(date +%s)
+[ -n "$timestamp" ] || timestamp=0
 uptime_sec=$(awk '{ printf "%d", $1 }' /proc/uptime 2>/dev/null)
+[ -n "$uptime_sec" ] || uptime_sec=0
 
 json_add_int "timestamp" "$timestamp"
 json_add_int "uptime_sec" "$uptime_sec"
@@ -226,7 +228,7 @@ for d in /sys/bus/mmc/devices/*; do
 		[ -r "$lf" ] || continue
 		bfile=$(cat "$lf" 2>/dev/null)
 		case "$bfile" in
-			*"$blk"*)
+			*"/$blk"|*"/${blk}p"[0-9]*|"$blk"|"${blk}p"[0-9]*)
 				ldir=${lf%/loop/backing_file}
 				ldev="/dev/$(basename "$ldir")"
 				bname=$(basename "$bfile")

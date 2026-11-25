@@ -209,7 +209,8 @@ jobs:
 
       - name: Check Scripts
         run: |
-          find ./ -maxdepth 3 -type f -iregex ".*\(txt\|sh\|mk\)$" -exec dos2unix {} \; -exec chmod +x {} \;
+          find ./ -maxdepth 3 -type f -iregex ".*\(txt\|sh\|mk\)$" -exec dos2unix {} +
+          find ./ -maxdepth 3 -type f -iname "*.sh" -exec chmod +x {} +
 
       - name: Restore Build Cache
         id: cache-restore
@@ -538,6 +539,21 @@ jobs:
           name: build-reports-${{env.WRT_CONFIG}}-${{env.WRT_INFO}}-${{github.run_attempt}}
           path: ./build-reports/
           retention-days: 7
+
+      - name: Prune Stale Download Cache Before Save
+        if: ${{ !inputs.WRT_TEST && success() && steps.cache-dl.outputs.cache-hit != 'true' }}
+        continue-on-error: true
+        env:
+          GH_TOKEN: ${{secrets.GITHUB_TOKEN}}
+          GH_REPO: ${{github.repository}}
+        run: |
+          gh cache list --repo "$GH_REPO" --limit 100 --json id,key \
+            --jq '.[] | select((.key | startswith("'"${WRT_DL_CACHE_PREFIX}-"'")) and (.key != "'"${WRT_DL_CACHE_KEY}"'")) | .id' |
+            while read -r CACHE_ID; do
+              [ -n "$CACHE_ID" ] || continue
+              echo "pruning stale download cache: $CACHE_ID"
+              gh cache delete "$CACHE_ID" --repo "$GH_REPO" || true
+            done
 
       - name: Save Download Cache
         # 同 Save Build Cache：缓存只是加速手段，超限或失败都不该影响交付。

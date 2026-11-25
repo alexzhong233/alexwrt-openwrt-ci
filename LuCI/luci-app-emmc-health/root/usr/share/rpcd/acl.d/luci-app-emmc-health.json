@@ -3,8 +3,7 @@
 		"description": "Read eMMC health, lifetime estimation, Pre-EOL status and mount I/O metrics",
 		"read": {
 			"file": {
-				"/bin/sh": [ "exec" ],
-				"/usr/libexec/emmc-health-info": [ "read", "exec" ]
+				"/usr/libexec/emmc-health-info": [ "exec" ]
 			}
 		},
 		"write": {}
